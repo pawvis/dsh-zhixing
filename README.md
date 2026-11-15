@@ -9,6 +9,7 @@ Turn what you did in Harness into a daily report, carry tomorrow's plan into tom
 
 [简体中文](docs/lang/README_ZH.md) · [Quick start](#quick-start) · [What it does](#what-it-does) · [A little luck](#a-little-luck) · [Privacy & data](#privacy--data) · [Troubleshooting](#troubleshooting)
 
+[![npm](https://img.shields.io/npm/v/dsh-zhixing?label=npm)](https://www.npmjs.com/package/dsh-zhixing)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/pawvis/dsh-zhixing?label=release)](https://github.com/pawvis/dsh-zhixing/releases)
 
@@ -28,17 +29,15 @@ The plugin appears in the DSH sidebar as **知行**. The UI is in Simplified Chi
 ## Quick start
 
 1. Install DeepSeek Harness Desktop 0.2.x and make sure plugins are enabled.
-2. Clone this repository:
+2. In DSH, open **Plugins → Add plugin**, enter `dsh-zhixing`, and install it. Or use the CLI:
 
    ```sh
-   git clone https://github.com/pawvis/dsh-zhixing.git
+   dsh plugin --profile desktop add dsh-zhixing
    ```
 
-3. In DSH, open **Plugins → Add plugin** and select the cloned `dsh-zhixing` folder. If your DSH version supports the CLI, `dsh plugin --profile desktop add ./dsh-zhixing` is equivalent.
-4. Restart DSH and open **知行** in the sidebar.
-5. Open **设置** to set the morning / evening reminders, region and clock. Everything is stored under `~/.dsh/data/知行/`.
-
-> **Install note:** the npm package is not published yet. For now clone the repository as above. Once it is published, `dsh plugin --profile desktop add dsh-zhixing` will be the one-line install.
+   From source: clone `https://github.com/pawvis/dsh-zhixing.git` and select the cloned folder in **Plugins → Add plugin**.
+3. Restart DSH and open **知行** in the sidebar.
+4. Open **设置** to set the morning / evening reminders, region and clock. Everything is stored under `~/.dsh/data/知行/`.
 
 ## What it does
 
@@ -134,7 +133,7 @@ scripts/            # checks
 
 Full feature notes: [docs/DETAIL.md](docs/DETAIL.md) (Chinese). Issues and ideas: [GitHub Issues](https://github.com/pawvis/dsh-zhixing/issues).
 
-To publish the npm package, run `npm login` and `npm publish` from this folder. The package is already marked public via `publishConfig`; the name is `dsh-zhixing`.
+The npm package is published as `dsh-zhixing`. Maintainers bump the version in `package.json` and run `npm publish` from this folder.
 
 ## Languages
 

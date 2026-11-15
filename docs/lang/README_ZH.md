@@ -9,6 +9,7 @@
 
 [English](../../README.md) · 简体中文 · [快速开始](#快速开始) · [一个插件，四个页面](#一个插件四个页面) · [今天吃什么与今日运势](#今天吃什么与今日运势) · [隐私与数据](#隐私与数据) · [常见问题](#常见问题)
 
+[![npm](https://img.shields.io/npm/v/dsh-zhixing?label=npm)](https://www.npmjs.com/package/dsh-zhixing)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/pawvis/dsh-zhixing?label=release)](https://github.com/pawvis/dsh-zhixing/releases)
 
@@ -28,17 +29,15 @@
 ## 快速开始
 
 1. 安装 DeepSeek Harness Desktop 0.2.x，并确认插件功能已启用。
-2. 克隆仓库：
+2. 在 DSH 里打开 **Plugins → Add plugin**，输入 `dsh-zhixing` 安装。也可以走命令行：
 
    ```sh
-   git clone https://github.com/pawvis/dsh-zhixing.git
+   dsh plugin --profile desktop add dsh-zhixing
    ```
 
-3. 在 DSH 里打开 **Plugins → Add plugin**，选择克隆下来的 `dsh-zhixing` 文件夹。如果你的 DSH 版本支持命令行，也可以执行 `dsh plugin --profile desktop add ./dsh-zhixing`。
-4. 重启 DSH，在左侧栏点 **知行**。
-5. 打开 **设置**，按自己的作息改早晚提醒、地区和时钟。所有数据都在 `~/.dsh/data/知行/`。
-
-> **安装说明**：npm 包目前还没有发布；先按上面的 git clone 安装。发布之后，`dsh plugin --profile desktop add dsh-zhixing` 就是一行安装。
+   想从源码安装：克隆 `https://github.com/pawvis/dsh-zhixing.git`，在 **Plugins → Add plugin** 里选择克隆下来的文件夹。
+3. 重启 DSH，在左侧栏点 **知行**。
+4. 打开 **设置**，按自己的作息改早晚提醒、地区和时钟。所有数据都在 `~/.dsh/data/知行/`。
 
 ## 今日
 
@@ -163,7 +162,7 @@ scripts/            # 检查脚本
 
 完整功能说明见 [docs/DETAIL.md](../DETAIL.md)。问题 / 建议：[GitHub Issues](https://github.com/pawvis/dsh-zhixing/issues)。
 
-如果要发布 npm 包，在本目录执行 `npm login` 和 `npm publish`。包已经通过 `publishConfig` 标记为 public，名字是 `dsh-zhixing`。
+npm 包已发布为 `dsh-zhixing`。维护者修改 `package.json` 里的版本号后，在本目录执行 `npm publish` 即可。
 
 ## 语言
 
