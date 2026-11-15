@@ -1,0 +1,68 @@
+{
+  "name": "dsh-zhixing",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "知行：把 DeepSeek Harness 里的一天整理成日报，把明天的计划变成明天的待办，并管理周月年目标。A local-first workday workspace for DeepSeek Harness.",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "lib",
+    "locale/*.json",
+    "docs/*.md",
+    "docs/lang/*.md",
+    "docs/readme/*",
+    "icon.svg",
+    "scripts",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  },
+  "license": "MIT",
+  "author": "dsh-zhixing contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pawvis/dsh-zhixing.git"
+  },
+  "homepage": "https://github.com/pawvis/dsh-zhixing#readme",
+  "bugs": {
+    "url": "https://github.com/pawvis/dsh-zhixing/issues"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "deepseek-harness-desktop",
+    "dsh-plugin",
+    "productivity",
+    "todo",
+    "daily-report",
+    "goals"
+  ],
+  "scripts": {
+    "check": "node scripts/check-components.mjs && node --check index.js && node --check client.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
