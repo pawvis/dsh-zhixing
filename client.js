@@ -7,7 +7,93 @@ window.__ModuleLoader__.load({
 
     const API = '/api/zhixing'
     const PANEL_ID = 'zhixing'
-    const CYCLES = ['年', '月', '周']
+    const CYCLES = ['年', '季度', '月', '周']
+    const CYCLE_RANK = { 周: 1, 月: 2, 季度: 3, 年: 4 }
+    const CHILD_CYCLE = { 年: '季度', 季度: '月', 月: '周' }
+    const PARENT_CYCLE = { 周: '月', 月: '季度', 季度: '年' }
+    // 城市 → 时区。插件里所有日期和时间都以设置里的城市时区为准。
+    const CITY_TZ = {
+      北京: 'Asia/Shanghai', 上海: 'Asia/Shanghai', 广州: 'Asia/Shanghai', 深圳: 'Asia/Shanghai',
+      成都: 'Asia/Shanghai', 杭州: 'Asia/Shanghai', 南京: 'Asia/Shanghai', 武汉: 'Asia/Shanghai',
+      西安: 'Asia/Shanghai', 重庆: 'Asia/Shanghai', 天津: 'Asia/Shanghai', 苏州: 'Asia/Shanghai',
+      长沙: 'Asia/Shanghai', 郑州: 'Asia/Shanghai', 青岛: 'Asia/Shanghai', 沈阳: 'Asia/Shanghai',
+      大连: 'Asia/Shanghai', 厦门: 'Asia/Shanghai', 福州: 'Asia/Shanghai', 济南: 'Asia/Shanghai',
+      合肥: 'Asia/Shanghai', 昆明: 'Asia/Shanghai', 南宁: 'Asia/Shanghai', 贵阳: 'Asia/Shanghai',
+      太原: 'Asia/Shanghai', 石家庄: 'Asia/Shanghai', 哈尔滨: 'Asia/Shanghai', 长春: 'Asia/Shanghai',
+      南昌: 'Asia/Shanghai', 海口: 'Asia/Shanghai', 兰州: 'Asia/Shanghai', 西宁: 'Asia/Shanghai',
+      银川: 'Asia/Shanghai', 乌鲁木齐: 'Asia/Shanghai', 拉萨: 'Asia/Shanghai', 呼和浩特: 'Asia/Shanghai',
+      香港: 'Asia/Hong_Kong', 澳门: 'Asia/Macau', 台北: 'Asia/Taipei',
+      东京: 'Asia/Tokyo', 大阪: 'Asia/Tokyo', 首尔: 'Asia/Seoul', 新加坡: 'Asia/Singapore',
+      曼谷: 'Asia/Bangkok', 雅加达: 'Asia/Jakarta', 马尼拉: 'Asia/Manila', 吉隆坡: 'Asia/Kuala_Lumpur',
+      新德里: 'Asia/Kolkata', 孟买: 'Asia/Kolkata', 迪拜: 'Asia/Dubai', 莫斯科: 'Europe/Moscow',
+      伦敦: 'Europe/London', 巴黎: 'Europe/Paris', 柏林: 'Europe/Berlin', 罗马: 'Europe/Rome',
+      马德里: 'Europe/Madrid', 阿姆斯特丹: 'Europe/Amsterdam', 苏黎世: 'Europe/Zurich',
+      纽约: 'America/New_York', 华盛顿: 'America/New_York', 波士顿: 'America/New_York',
+      洛杉矶: 'America/Los_Angeles', 旧金山: 'America/Los_Angeles', 西雅图: 'America/Los_Angeles',
+      芝加哥: 'America/Chicago', 多伦多: 'America/Toronto', 温哥华: 'America/Vancouver',
+      墨西哥城: 'America/Mexico_City', 圣保罗: 'America/Sao_Paulo',
+      悉尼: 'Australia/Sydney', 墨尔本: 'Australia/Melbourne', 珀斯: 'Australia/Perth',
+      奥克兰: 'Pacific/Auckland',
+    }
+    const CITY_NAMES = Object.keys(CITY_TZ)
+    let ACTIVE_TZ = ''
+    function systemTz() {
+      try { return Intl.DateTimeFormat().resolvedOptions().timeZone || '' } catch { return '' }
+    }
+    function isValidTz(tz) {
+      if (!tz) return false
+      try { new Intl.DateTimeFormat('en-US', { timeZone: String(tz) }); return true } catch { return false }
+    }
+    function setActiveTz(tz) {
+      ACTIVE_TZ = isValidTz(tz) ? String(tz) : ''
+    }
+    function currentTz() {
+      return ACTIVE_TZ || systemTz()
+    }
+    /** 城市名 → IANA 时区；支持「成都市」这种带后缀的输入。 */
+    function tzForRegion(region) {
+      const text = String(region ?? '').trim()
+      if (!text) return ''
+      if (CITY_TZ[text]) return CITY_TZ[text]
+      const found = CITY_NAMES.filter((name) => text.includes(name)).sort((a, b) => b.length - a.length)[0]
+      return found ? CITY_TZ[found] : ''
+    }
+    function zoneParts(date = new Date(), tz = currentTz()) {
+      try {
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+          timeZone: tz, hourCycle: 'h23',
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+        })
+        const out = {}
+        for (const part of formatter.formatToParts(date)) if (part.type !== 'literal') out[part.type] = part.value
+        return { year: Number(out.year), month: Number(out.month), day: Number(out.day), hour: Number(out.hour), minute: Number(out.minute), second: Number(out.second) }
+      } catch {
+        return { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate(), hour: date.getHours(), minute: date.getMinutes(), second: date.getSeconds() }
+      }
+    }
+    /** 目标时区的「现在」，用本地 Date 承载，getHours/getDate 即为当地时间。 */
+    function nowInZone() {
+      const parts = zoneParts()
+      return new Date(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
+    }
+    function formatDateTimeInZone(date = new Date(), tz = currentTz(), withSeconds = true) {
+      const parts = zoneParts(date, tz)
+      const pad = (n) => String(n).padStart(2, '0')
+      return `${parts.year}-${pad(parts.month)}-${pad(parts.day)} ${pad(parts.hour)}:${pad(parts.minute)}${withSeconds ? `:${pad(parts.second)}` : ''}`
+    }
+    function formatDateInZone(date = new Date(), tz = currentTz()) {
+      try {
+        return new Intl.DateTimeFormat('zh-CN', { timeZone: tz, month: 'long', day: 'numeric', weekday: 'long' }).format(date)
+      } catch {
+        return `${date.getMonth() + 1} 月 ${date.getDate()} 日 ${date.toLocaleDateString('zh-CN', { weekday: 'long' })}`
+      }
+    }
+    function tzLongName(tz = currentTz()) {
+      try {
+        return new Intl.DateTimeFormat('zh-CN', { timeZone: tz, timeZoneName: 'long' }).formatToParts(new Date()).find((item) => item.type === 'timeZoneName')?.value || tz
+      } catch { return tz }
+    }
     // 内容库：与 docs/feature-c-20261114/内容库.json 逐字一致（脚本内联，不手抄）
     const LUCKY_DATA =     {
      "meals": {
@@ -1286,6 +1372,62 @@ window.__ModuleLoader__.load({
       .wb-goal.child{margin-left:22px}
       .wb-goal.grandchild{margin-left:44px}
       .wb-goal-title{font-weight:600;font-size:13px}
+      .wb-imp-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+      .wb-imp-head .wb-imp-count{font-size:14px;font-weight:600;color:var(--wb-text)}
+      .wb-imp-head .wb-imp-sub{font-size:12px;color:var(--wb-text-3)}
+      .wb-imp-src{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--wb-r-md);background:var(--wb-surface-2);font-size:12px;color:var(--wb-text-3)}
+      .wb-imp-src span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .wb-imp-tree{display:flex;flex-direction:column;gap:12px}
+      .wb-imp-group{border:1px solid var(--wb-border);border-radius:var(--wb-r-lg);background:var(--wb-card);overflow:hidden;padding-bottom:6px}
+      .wb-imp-group:has(> .wb-imp-node.only){padding-bottom:0}
+      .wb-imp-node{position:relative;display:flex;gap:8px;align-items:flex-start;padding:8px 12px 8px 6px;border-radius:8px;cursor:pointer;transition:background .12s}
+      .wb-imp-node:hover{background:var(--wb-surface-2)}
+      .wb-imp-node.editing{background:var(--wb-ai-soft)}
+      .wb-imp-node.root{padding:14px 14px 14px 10px;border-radius:0;background:linear-gradient(90deg,var(--wb-ai-soft),transparent 75%);border-bottom:1px solid var(--wb-border);margin-bottom:6px}
+      .wb-imp-node.root:hover{background:var(--wb-ai-soft)}
+      .wb-imp-node.root::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--wb-ai)}
+      .wb-imp-node.root.only{border-bottom:0;margin-bottom:0}
+      .wb-imp-kids{margin-left:20px}
+      .wb-imp-group > .wb-imp-kids{margin-left:22px;margin-right:8px}
+      .wb-imp-branch{position:relative;padding-left:14px}
+      .wb-imp-branch::before{content:"";position:absolute;left:0;top:0;bottom:0;border-left:1px solid var(--wb-border-strong)}
+      .wb-imp-branch:last-child::before{bottom:auto;height:19px}
+      .wb-imp-branch::after{content:"";position:absolute;left:0;top:19px;width:10px;border-top:1px solid var(--wb-border-strong)}
+      .wb-imp-caret{flex:none;width:16px;height:20px;margin-top:1px;border:0;padding:0;background:transparent;color:var(--wb-text-3);cursor:pointer;font-size:11px;line-height:20px;border-radius:4px;transition:transform .15s}
+      .wb-imp-caret:hover{color:var(--wb-text);background:var(--wb-surface-3)}
+      .wb-imp-caret.closed{transform:rotate(-90deg)}
+      .wb-imp-caret.empty{cursor:default;background:transparent}
+      .wb-imp-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+      .wb-imp-title{font-size:13px;font-weight:500;color:var(--wb-text);line-height:1.5}
+      .wb-imp-node.lv-年 .wb-imp-title{font-size:16px;font-weight:700;letter-spacing:.2px}
+      .wb-imp-node.lv-季度 .wb-imp-title{font-size:14px;font-weight:650}
+      .wb-imp-node.lv-月 .wb-imp-title{font-size:13.5px;font-weight:600}
+      .wb-imp-measure{font-size:12px;color:var(--wb-text-3);line-height:1.55;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+      .wb-imp-node.lv-年 .wb-imp-measure{font-size:12.5px;color:var(--wb-text-2);-webkit-line-clamp:3}
+      .wb-imp-node.lv-季度 .wb-imp-measure{-webkit-line-clamp:2}
+      .wb-imp-meta{margin-top:2px;font-size:11px;color:var(--wb-text-3)}
+      .wb-imp-date{flex:none;font-size:11px;color:var(--wb-text-3);line-height:22px;font-variant-numeric:tabular-nums;white-space:nowrap}
+      .wb-imp-cycle{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:20px;padding:0 6px;margin-top:1px;border-radius:6px;font-size:11px;font-weight:600;background:var(--wb-surface-2);color:var(--wb-text-2)}
+      .wb-imp-cycle.c-年{background:var(--wb-ai);color:#fff;height:22px;margin-top:2px}
+      .wb-imp-cycle.c-季度{background:rgba(99,102,241,.14);color:#4F46E5}
+      .wb-imp-cycle.c-月{background:var(--wb-primary-soft);color:var(--wb-primary)}
+      .wb-imp-cycle.c-周{background:rgba(16,185,129,.14);color:#047857}
+      .wb-root[data-wb-theme="dark"] .wb-imp-cycle.c-年{background:#7C3AED}
+      .wb-root[data-wb-theme="dark"] .wb-imp-cycle.c-季度{background:rgba(129,140,248,.18);color:#A5B4FC}
+      .wb-root[data-wb-theme="dark"] .wb-imp-cycle.c-月{color:#93C5FD}
+      .wb-root[data-wb-theme="dark"] .wb-imp-cycle.c-周{background:rgba(52,211,153,.16);color:#6EE7B7}
+      .wb-imp-acts{flex:none;display:flex;gap:2px;opacity:0;transition:opacity .12s}
+      .wb-imp-node:hover .wb-imp-acts,.wb-imp-node:focus-within .wb-imp-acts{opacity:1}
+      .wb-imp-node:hover .wb-imp-date{display:none}
+      .wb-imp-act{border:0;background:transparent;color:var(--wb-text-3);cursor:pointer;font:inherit;font-size:12px;padding:2px 8px;border-radius:6px}
+      .wb-imp-act:hover{background:var(--wb-surface-3);color:var(--wb-text)}
+      .wb-imp-act.danger:hover{color:var(--wb-danger)}
+      .wb-imp-edit{margin:4px 8px 10px 30px;padding:12px;border:1px solid var(--wb-ai-line);border-radius:var(--wb-r-md);background:var(--wb-card);display:flex;flex-direction:column;gap:8px;cursor:default}
+      .wb-imp-edit label{font-size:11px;color:var(--wb-text-3);display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+      .wb-imp-edit .wb-imp-grid{display:flex;gap:8px}
+      .wb-imp-foot{position:sticky;bottom:-16px;margin:4px -18px -16px;padding:12px 18px;background:var(--wb-card);border-top:1px solid var(--wb-border);display:flex;align-items:center;gap:8px;z-index:2}
+      .wb-imp-foot .wb-imp-sum{flex:1;font-size:12px;color:var(--wb-text-3)}
+      .wb-imp-foot .wb-imp-sum b{color:var(--wb-text);font-weight:600}
       .wb-suggest{border:1px dashed var(--wb-accent);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;background:rgba(59,130,246,.05)}
       .wb-suggest-item{border-top:1px solid var(--wb-ai-line);padding-top:8px;display:flex;flex-direction:column;gap:4px;min-width:0}
       .wb-quote{font-size:12px;color:var(--wb-muted);border-left:3px solid var(--wb-border);padding-left:8px}
@@ -1483,6 +1625,7 @@ window.__ModuleLoader__.load({
       @media(max-width:700px){.wb-banner-quote{flex-basis:100%;white-space:normal;font-size:14px;line-height:1.55}}
       .wb-cycle-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:6px;font-size:10px;font-weight:700;margin-right:6px;flex:0 0 auto}
       .wb-cycle-badge.年{background:rgba(139,92,246,.16);color:#7c3aed}
+      .wb-cycle-badge.季度{background:rgba(99,102,241,.16);color:#4f46e5}
       .wb-cycle-badge.月{background:rgba(59,130,246,.16);color:#2563eb}
       .wb-cycle-badge.周{background:rgba(16,185,129,.16);color:#059669}
       .wb-okr-grid{align-items:start}
@@ -1514,6 +1657,9 @@ window.__ModuleLoader__.load({
       .wb-doc-meta .wb-badge{white-space:nowrap;flex:0 0 auto}
       .wb-doc-meta .wb-ai-tag{margin-left:auto;height:16px;padding:0 4px;font-size:9px}
       .wb-reports2{display:grid;align-items:start;gap:0}
+      .wb-reports-html{flex:1 1 auto;min-height:0;align-items:stretch;grid-auto-rows:minmax(0,1fr)}
+      .wb-report-detail-html{min-height:0;overflow:hidden}
+      .wb-iframe-fill{flex:1 1 auto;height:auto;min-height:360px}
       @media (max-width:900px){.wb-reports2{grid-template-columns:minmax(0,1fr)!important}.wb-reports2 > .wb-split{display:none}}
       .wb-doc-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
       .wb-timeline{display:flex;flex-direction:column;gap:6px}
@@ -1722,6 +1868,16 @@ window.__ModuleLoader__.load({
       .wb-sugtag-lv{font-size:10px;border-radius:99px;padding:0 6px;background:var(--wb-card);border:1px solid var(--wb-ai-line);white-space:nowrap}
       .wb-evquote{border-left:3px solid var(--wb-ai-line);padding-left:8px;font-size:11px;color:var(--wb-text-3);line-height:1.6}
       .wb-evquote mark{background:var(--wb-ai-soft);color:var(--wb-ai);border-radius:3px;padding:0 2px}
+      .wb-goal-sug{border:1px solid var(--wb-ai-line);border-radius:var(--wb-r-lg);background:var(--wb-ai-soft);padding:10px 12px;display:flex;flex-direction:column;gap:9px;margin-top:2px}
+      .wb-goal-sug-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+      .wb-goal-sug-list{display:flex;flex-direction:column;gap:8px}
+      .wb-goal-sug-item{display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--wb-border);padding-top:8px}
+      .wb-goal-sug-item:first-child{border-top:0;padding-top:0}
+      .wb-goal-sug-analysis{display:flex;flex-direction:column;gap:6px;padding:9px 10px;border:1px solid var(--wb-border);border-radius:var(--wb-r-md);background:var(--wb-card);font-size:12px;color:var(--wb-text-2)}
+      .wb-goal-sug-why{display:flex;align-items:flex-start;gap:8px;line-height:1.55}
+      .wb-goal-sug-why .wb-cycle-badge,.wb-goal-sug-item .wb-cycle-badge{margin-right:0}
+      .wb-goal-sug-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid var(--wb-border);padding-top:8px}
+      .wb-goal-sug-caret{font-size:10px;opacity:.75}
       .wb-todo-body-scroll{scroll-behavior:smooth}
 
       /* ===== 今日页：今天吃什么 / 今日运势（feature-c） ===== */
@@ -1946,7 +2102,7 @@ window.__ModuleLoader__.load({
         const timer = setInterval(() => { refresh(); setTick((value) => value + 1) }, 30_000)
         return () => { observer.disconnect(); media?.removeEventListener?.('change', onChange); clearInterval(timer) }
       }, [])
-      return computeTheme(settings, hostDark, systemDark, new Date())
+      return computeTheme(settings, hostDark, systemDark, nowInZone())
     }
 
     function useToast() {
@@ -2106,7 +2262,7 @@ window.__ModuleLoader__.load({
     }
 
     function todayKey() {
-      const d = new Date()
+      const d = nowInZone()
       const pad = (n) => String(n).padStart(2, '0')
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
     }
@@ -2119,7 +2275,7 @@ window.__ModuleLoader__.load({
     }
 
     function shiftMonthKey(key, delta) {
-      const date = dateOfKey(key) ?? new Date()
+      const date = dateOfKey(key) ?? nowInZone()
       return keyOf(new Date(date.getFullYear(), date.getMonth() + delta, 1))
     }
 
@@ -2147,7 +2303,7 @@ window.__ModuleLoader__.load({
     }
 
     function defaultSummaryRange(kind, anchorKey) {
-      const base = dateOfKey(anchorKey) ?? new Date()
+      const base = dateOfKey(anchorKey) ?? nowInZone()
       if (kind === 'month') {
         const from = new Date(base.getFullYear(), base.getMonth(), 1)
         const to = new Date(base.getFullYear(), base.getMonth() + 1, 0)
@@ -2616,7 +2772,7 @@ window.__ModuleLoader__.load({
       const [minute, setMinute] = useState('00')
       const [view, setView] = useState(() => {
         const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? ''))
-        return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date()
+        return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : nowInZone()
       })
       const boxRef = useRef(null)
       useEffect(() => {
@@ -2652,7 +2808,7 @@ window.__ModuleLoader__.load({
       const startOffset = (first.getDay() + 6) % 7
       const days = []
       for (let i = 0; i < 42; i += 1) days.push(new Date(year, month, 1 - startOffset + i))
-      const today = keyOf(new Date())
+      const today = keyOf(nowInZone())
       const currentDate = /^(\d{4}-\d{2}-\d{2})/.exec(String(value ?? ''))?.[1] ?? ''
       const commit = (key, hh = hour, mm = minute) => {
         setSelected(key)
@@ -2685,7 +2841,7 @@ window.__ModuleLoader__.load({
             h('div', { className: 'wb-cal-title' }, `${year} 年 ${month + 1} 月`),
             h('button', { className: 'wb-cal-nav', onClick: () => setView(new Date(year, month + 1, 1)) }, '›'),
             h('div', { className: 'wb-spacer' }),
-            h('button', { className: 'wb-cal-nav', title: '回到今天', onClick: () => setView(new Date()) }, '◎'),
+            h('button', { className: 'wb-cal-nav', title: '回到今天', onClick: () => setView(nowInZone()) }, '◎'),
           ),
           h('div', { className: 'wb-cal-week' }, ['一', '二', '三', '四', '五', '六', '日'].map((day) => h('span', { key: day }, day))),
           h('div', { className: 'wb-cal-grid' },
@@ -2789,8 +2945,8 @@ window.__ModuleLoader__.load({
         ))
     }
 
-    function GoalFormModal({ goal, goals, parentId, cycle, initialTitle, onClose, onSaved, show, ai }) {
-      const RANK = { 周: 1, 月: 2, 年: 3 }
+    function GoalFormModal({ goal, goals, parentId, cycle, cycleChoices, initialTitle, onClose, onSaved, show, ai }) {
+      const RANK = CYCLE_RANK
       const derivedCycle = goal?.cycle ?? cycle ?? '周'
       const [form, setForm] = useState({
         title: goal?.title ?? initialTitle ?? '',
@@ -2807,15 +2963,23 @@ window.__ModuleLoader__.load({
       const [preview, setPreview] = useState([])
       const [importBusy, setImportBusy] = useState('')
       const fileRef = useRef(null)
+      const [extraGoals, setExtraGoals] = useState([])
+      const [creatingParent, setCreatingParent] = useState(false)
       const off = aiOffOf(ai)
       const set = (key, value) => setForm((current) => ({ ...current, [key]: value }))
-      const parentOptions = (goals ?? []).filter((item) => {
+      const choices = cycleChoices?.length ? cycleChoices : CYCLES
+      // 新建上级目标后先并入本地列表，保证下拉里立刻能显示并选中。
+      const allGoals = useMemo(() => {
+        const known = new Set((goals ?? []).map((item) => item.id))
+        return [...(goals ?? []), ...extraGoals.filter((item) => item?.id && !known.has(item.id))]
+      }, [goals, extraGoals])
+      const parentOptions = allGoals.filter((item) => {
         if (goal && item.id === goal.id) return false
         return (RANK[item.cycle] ?? 0) > (RANK[form.cycle] ?? 0)
       })
       const changeCycle = (value) => {
         setForm((current) => {
-          const parent = (goals ?? []).find((item) => item.id === current.parentId)
+          const parent = allGoals.find((item) => item.id === current.parentId)
           const keep = parent && (RANK[parent.cycle] ?? 0) > (RANK[value] ?? 0)
           return { ...current, cycle: value, parentId: keep ? current.parentId : '' }
         })
@@ -2835,7 +2999,7 @@ window.__ModuleLoader__.load({
           if (!payload.text && !payload.files?.length) { show('先粘贴文本或选择文件', 'error'); return }
           const data = await request('/goals/import/parse', payload)
           setPreview((data.goals ?? []).map((item, index) => ({ ...item, checked: true, key: `${index}-${item.title}` })))
-          show(`拆出 ${data.goals?.length ?? 0} 个目标，可填入表单或全部导入`)
+          show(`拆出 ${data.goals?.length ?? 0} 个目标${data.partial ? '（模型输出被截断，可能少了目标，建议重新拆解）' : ''}，可填入表单或全部导入`)
         } catch (error) { show(error.message, 'error') } finally { setImportBusy(''); if (fileRef.current) fileRef.current.value = '' }
       }
       const saveAll = async () => {
@@ -2843,7 +3007,9 @@ window.__ModuleLoader__.load({
         if (!picked.length) { show('先勾选要导入的目标', 'error'); return }
         setImportBusy('save')
         try {
-          const data = await request('/goals/import/save', { goals: picked.map(({ key, checked, ...rest }) => rest) })
+          // 先按树重排并重映射 parentIndex，再筛掉未勾选项，避免子目标挂到被取消勾选的上级名下。
+          const payload = importTreeOrder(preview, (i) => Boolean(preview[i].checked))
+          const data = await request('/goals/import/save', { goals: payload.map(({ key, checked, ...rest }) => rest) })
           await onSaved?.()
           show(`已导入 ${data.created.length} 个目标`)
           onClose()
@@ -2886,25 +3052,33 @@ window.__ModuleLoader__.load({
           onClose()
         } catch (error) { show(error.message, 'error') } finally { setBusy(false) }
       }
-      return h(Modal, {
-        title: goal ? '编辑目标' : '新建目标',
-        onClose,
-        footer: [
-          h('button', { key: 'cancel', className: 'wb-btn', onClick: onClose }, '取消'),
-          h('button', { key: 'save', className: 'wb-btn primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存'),
-        ],
-      },
+      return h(React.Fragment, null,
+        h(Modal, {
+          title: goal ? '编辑目标' : '新建目标',
+          onClose,
+          footer: [
+            h('button', { key: 'cancel', className: 'wb-btn', onClick: onClose }, '取消'),
+            h('button', { key: 'save', className: 'wb-btn primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存'),
+          ],
+        },
         h('div', { className: 'wb-form-grid' },
           h('label', { className: 'wb-form-field full' }, '目标标题',
             h('input', { id: 'goal-title', className: `wb-input${errors.title ? ' invalid' : ''}`, value: form.title, autoFocus: true, placeholder: '例如：完成登录改造', onChange: (event) => { set('title', event.target.value); if (errors.title) setErrors((current) => ({ ...current, title: '' })) } }),
             errors.title ? h('div', { className: 'wb-field-error' }, errors.title) : null),
           h('label', { className: 'wb-form-field' }, '周期',
             h('select', { className: 'wb-select', value: form.cycle, onChange: (event) => changeCycle(event.target.value) },
-              CYCLES.map((item) => h('option', { key: item, value: item }, item)))),
+              choices.map((item) => h('option', { key: item, value: item }, item)))),
           h('label', { className: 'wb-form-field' }, '上级目标',
-            h('select', { className: 'wb-select', value: form.parentId, onChange: (event) => set('parentId', event.target.value), disabled: form.cycle === '年' },
+            h('select', {
+              className: 'wb-select', value: form.parentId, disabled: form.cycle === '年',
+              onChange: (event) => {
+                if (event.target.value === '__create__') { setCreatingParent(true); return }
+                set('parentId', event.target.value)
+              },
+            },
               h('option', { value: '' }, form.cycle === '年' ? '年度目标没有上级' : '无（顶层）'),
-              parentOptions.map((item) => h('option', { key: item.id, value: item.id }, `${item.cycle} · ${item.title}`)))),
+              parentOptions.map((item) => h('option', { key: item.id, value: item.id }, `${item.cycle} · ${item.title}`)),
+              form.cycle === '年' ? null : h('option', { value: '__create__' }, '＋ 新建上级目标'))),
           h('label', { className: 'wb-form-field' }, '开始日期',
             h(DateField, { value: form.startDate, onChange: (next) => set('startDate', next) })),
           h('label', { className: 'wb-form-field' }, '结束日期',
@@ -2946,7 +3120,13 @@ window.__ModuleLoader__.load({
                 }),
                 h('div', { style: { flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 } },
                   h('div', { className: 'wb-row' },
-                    h('select', { className: 'wb-select', style: { width: 64 }, value: item.cycle, onChange: (event) => setPreview(preview.map((entry, i) => i === index ? { ...entry, cycle: event.target.value } : entry)) },
+                    h('select', {
+                      className: 'wb-select', style: { width: 64 }, value: item.cycle,
+                      onChange: (event) => {
+                        const cycle = event.target.value
+                        setPreview(preview.map((entry, i) => i === index ? { ...entry, cycle, ...cycleRangeOf(cycle, entry.startDate) } : entry))
+                      },
+                    },
                       CYCLES.map((cycle) => h('option', { key: cycle, value: cycle }, cycle))),
                     h('input', { className: 'wb-input', value: item.title, onChange: (event) => setPreview(preview.map((entry, i) => i === index ? { ...entry, title: event.target.value } : entry)) })),
                   h('input', { className: 'wb-input', value: item.measure ?? '', placeholder: '衡量方式', onChange: (event) => setPreview(preview.map((entry, i) => i === index ? { ...entry, measure: event.target.value } : entry)) })),
@@ -2958,6 +3138,19 @@ window.__ModuleLoader__.load({
               h('input', { ref: fileRef, type: 'file', multiple: true, style: { display: 'none' }, accept: '.md,.markdown,.txt,.docx,.doc,.xlsx,.xls,.pptx,.ppt', onChange: (event) => parseImport(event.target.files) }),
               h('span', { className: 'wb-small wb-muted' }, '支持 md / docx / xlsx / pptx')),
           ),
+        ),
+        creatingParent ? h(GoalFormModal, {
+          goals: allGoals,
+          cycle: PARENT_CYCLE[form.cycle] ?? '年',
+          cycleChoices: CYCLES.filter((item) => (RANK[item] ?? 0) > (RANK[form.cycle] ?? 0)),
+          ai, show,
+          onClose: () => setCreatingParent(false),
+          onSaved: async (created) => {
+            if (!created?.id) return
+            setExtraGoals((current) => (current.some((item) => item.id === created.id) ? current : [...current, created]))
+            setForm((current) => ({ ...current, parentId: created.id }))
+          },
+        }) : null,
       )
     }
 
@@ -3178,49 +3371,69 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function GoalTagEditor({ date, tags, onClose, onSaved, show }) {
+    function GoalTagEditor({ date, tags, onClose, onSaved, show, ai }) {
       const [goals, setGoals] = useState([])
       const [selected, setSelected] = useState(new Set((tags ?? []).map((tag) => tag.id)))
       const [query, setQuery] = useState('')
       const [busy, setBusy] = useState(false)
-      useEffect(() => {
-        request('/goals').then((data) => setGoals(data.goals ?? [])).catch((error) => show(error.message, 'error'))
-      }, [show])
+      const [creating, setCreating] = useState(false)
+      const loadGoals = useCallback(async () => {
+        const data = await request('/goals')
+        setGoals(data.goals ?? [])
+      }, [])
+      useEffect(() => { loadGoals().catch((error) => show(error.message, 'error')) }, [loadGoals, show])
       const toggle = (id) => {
         const next = new Set(selected)
         if (next.has(id)) next.delete(id); else next.add(id)
         setSelected(next)
       }
+      const visibleGoals = goals.filter((goal) => fuzzyMatch(query, `${goal.title} ${goal.cycle} ${goal.measure ?? ''}`))
       const save = async () => {
         setBusy(true)
         try {
           await request('/report/tags', { date, goalIds: [...selected] })
-          const data = await request('/goals')
-          setGoals(data.goals ?? [])
+          await loadGoals()
           await onSaved?.()
           show('关联目标已更新')
           onClose()
         } catch (error) { show(error.message, 'error') } finally { setBusy(false) }
       }
-      return h(Modal, {
-        title: '日报关联目标',
-        onClose,
-        footer: [
-          h('button', { key: 'cancel', className: 'wb-btn', onClick: onClose }, '取消'),
-          h('button', { key: 'save', className: 'wb-btn primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存'),
-        ],
-      },
-        h('input', { className: 'wb-input', placeholder: '搜索目标（支持模糊）', value: query, onChange: (event) => setQuery(event.target.value) }),
-        goals.length
-          ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '50vh', overflow: 'auto' } },
-            goals.filter((goal) => fuzzyMatch(query, `${goal.title} ${goal.cycle} ${goal.measure ?? ''}`))
-              .map((goal) => h('label', { key: goal.id, className: 'wb-row', style: { cursor: 'pointer', padding: '4px 2px' } },
-                h('input', { type: 'checkbox', checked: selected.has(goal.id), onChange: () => toggle(goal.id) }),
-                h('span', { className: `wb-cycle-badge ${goal.cycle}` }, goal.cycle),
-                h('span', null, goal.title),
-              )))
-          : h('div', { className: 'wb-empty' }, '还没有目标，先去目标页新建。'),
-        h('div', { className: 'wb-small wb-muted' }, `已选 ${selected.size} 个`),
+      return h(React.Fragment, null,
+        h(Modal, {
+          title: '日报关联目标',
+          onClose,
+          footer: [
+            h('button', { key: 'cancel', className: 'wb-btn', onClick: onClose }, '取消'),
+            h('button', { key: 'save', className: 'wb-btn primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存'),
+          ],
+        },
+          h('div', { className: 'wb-row' },
+            h('input', { className: 'wb-input', style: { flex: 1 }, placeholder: '搜索目标（支持模糊）', value: query, onChange: (event) => setQuery(event.target.value) }),
+            goals.length ? h('button', { type: 'button', className: 'wb-btn sm', onClick: () => setCreating(true) }, '＋ 新建目标') : null),
+          goals.length
+            ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '50vh', overflow: 'auto' } },
+              visibleGoals.length
+                ? visibleGoals.map((goal) => h('label', { key: goal.id, className: 'wb-row', style: { cursor: 'pointer', padding: '4px 2px' } },
+                  h('input', { type: 'checkbox', checked: selected.has(goal.id), onChange: () => toggle(goal.id) }),
+                  h('span', { className: `wb-cycle-badge ${goal.cycle}` }, goal.cycle),
+                  h('span', null, goal.title),
+                ))
+                : h('div', { className: 'wb-empty' }, '没有匹配的目标'))
+            : h('div', { className: 'wb-empty', style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 } },
+              h('span', null, '还没有目标，可以直接在这里新建。'),
+              h('button', { type: 'button', className: 'wb-btn sm', onClick: () => setCreating(true) }, '＋ 新建目标')),
+          h('div', { className: 'wb-small wb-muted' }, `已选 ${selected.size} 个`),
+        ),
+        creating ? h(GoalFormModal, {
+          goals, ai, show,
+          onClose: () => setCreating(false),
+          onSaved: async (created) => {
+            if (!created?.id) return
+            await loadGoals()
+            setQuery('')
+            setSelected((current) => new Set(current).add(created.id))
+          },
+        }) : null,
       )
     }
 
@@ -3336,13 +3549,14 @@ window.__ModuleLoader__.load({
       const starts = list.map((todo) => parse(todo.startDate ?? todo.date)).filter(Number.isFinite)
       const ends = list.map((todo) => parse(todo.dueDate ?? todo.date)).filter(Number.isFinite)
       const baseMin = Math.min(...starts)
-      const baseMax = Math.max(...ends, Date.now())
+      const todayMid = dateOfKey(todayKey())?.getTime() ?? Date.now()
+      const baseMax = Math.max(...ends, todayMid + day)
       const pad = Math.max(day, (baseMax - baseMin) * 0.05)
       const min = baseMin - pad + offsetDays * day
       const max = baseMax + pad + offsetDays * day
       const span = Math.max(1, max - min)
       const pct = (value) => Math.max(0, Math.min(100, ((value - min) / span) * 100))
-      const todayPct = pct(Date.now())
+      const todayPct = pct(todayMid + day / 2)
       const fmt = (value) => {
         const date = new Date(value)
         return `${date.getMonth() + 1}/${date.getDate()}`
@@ -3653,21 +3867,6 @@ window.__ModuleLoader__.load({
       )
     }
 
-    const REGION_TZ = {
-      成都: 'Asia/Shanghai', 北京: 'Asia/Shanghai', 上海: 'Asia/Shanghai', 深圳: 'Asia/Shanghai',
-      广州: 'Asia/Shanghai', 杭州: 'Asia/Shanghai', 香港: 'Asia/Hong_Kong', 台北: 'Asia/Taipei',
-      东京: 'Asia/Tokyo', 新加坡: 'Asia/Singapore', 伦敦: 'Europe/London', 巴黎: 'Europe/Paris',
-      纽约: 'America/New_York', 华盛顿: 'America/New_York', 洛杉矶: 'America/Los_Angeles',
-      旧金山: 'America/Los_Angeles', 西雅图: 'America/Los_Angeles', 芝加哥: 'America/Chicago',
-      多伦多: 'America/Toronto', 悉尼: 'Australia/Sydney', 迪拜: 'Asia/Dubai',
-    }
-    function tzForRegion(region) {
-      const text = String(region ?? '').trim()
-      if (!text) return ''
-      if (REGION_TZ[text]) return REGION_TZ[text]
-      for (const [city, tz] of Object.entries(REGION_TZ)) return tz
-      return ''
-    }
     function formatClock(date, settings, tz) {
       const twelve = settings?.clockFormat === '12'
       if (tz) {
@@ -3690,7 +3889,7 @@ window.__ModuleLoader__.load({
       return `${suffix}${hh}:${mm}${ss}`
     }
 
-    function DailyBanner({ settings, show }) {
+    function DailyBanner({ settings, show, timezone }) {
       const [quote, setQuote] = useState(null)
       const [weather, setWeather] = useState(null)
       const [now, setNow] = useState(() => new Date())
@@ -3701,11 +3900,10 @@ window.__ModuleLoader__.load({
       }, [seconds])
       useEffect(() => {
         request('/quote/today').then((data) => setQuote(data.quote)).catch(() => {})
-        let tz = ''
-        try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? '' } catch { tz = '' }
+        const tz = timezone || currentTz()
         request(`/weather${tz ? `?tz=${encodeURIComponent(tz)}` : ''}`).then((data) => setWeather(data.weather)).catch(() => {})
-      }, [settings?.region, settings?.weatherEnabled])
-      const dateText = `${now.getMonth() + 1} 月 ${now.getDate()} 日 ${now.toLocaleDateString('zh-CN', { weekday: 'long' })}`
+      }, [settings?.region, settings?.weatherEnabled, timezone])
+      const dateText = formatDateInZone(now, timezone || currentTz())
       const [mealOpen, setMealOpen] = useState(false)
       const [fortuneOpen, setFortuneOpen] = useState(false)
       const mealBtnRef = useRef(null)
@@ -3722,7 +3920,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'wb-banner' },
           h('div', { className: 'wb-banner-facts' },
             weather?.ok ? h('span', { className: 'wb-banner-item' }, `☁ ${weather.city ? `${weather.city} ` : ''}${weather.text}`) : null,
-            h('span', { className: 'wb-banner-item time' }, formatClock(now, settings, tzForRegion(settings?.region))),
+            h('span', { className: 'wb-banner-item time' }, formatClock(now, settings, timezone || currentTz())),
             h('span', { className: 'wb-banner-item' }, dateText),
           ),
           quote ? h('div', { className: 'wb-banner-quote' },
@@ -3761,7 +3959,7 @@ window.__ModuleLoader__.load({
     }
     function luckyPad2(value) { return String(value).padStart(2, '0') }
     function luckyNowHM() {
-      const now = new Date()
+      const now = nowInZone()
       return `${luckyPad2(now.getHours())}:${luckyPad2(now.getMinutes())}`
     }
     function luckyMealKey(hm) {
@@ -4200,7 +4398,7 @@ window.__ModuleLoader__.load({
           ai: state.ai, date: state.today, completedCount, onSnooze: onSnoozeNotice,
           onOpenReport: (options) => setReportEditor({ date: state.today, ...options }),
         }) : null,
-        h(DailyBanner, { settings: state.settings, show }),
+        h(DailyBanner, { settings: state.settings, show, timezone: state.timezone }),
         h(Suggestions, { items: suggestions, onApply: onApplySuggestion, onDismiss: onDismissSuggestion }),
         h('div', { className: `wb-today${narrow ? ' wb-today-narrow' : ''}`, style: narrow ? undefined : { gridTemplateColumns: `${leftWidth}px 8px minmax(0,1fr)` } },
           h('div', { className: 'wb-col' }, h(TodoBoard, { state, refresh, show, ai: state.ai })),
@@ -4251,7 +4449,7 @@ window.__ModuleLoader__.load({
         .split('{{tags}}').join(tagsHtml)
         .split('{{title}}').join(title ?? `${date} 工作日报`)
         .split('{{date}}').join(date ?? '')
-        .split('{{generatedAt}}').join(new Date().toLocaleString('zh-CN'))
+        .split('{{generatedAt}}').join(formatDateTimeInZone(new Date()))
     }
 
     function downloadBlob(name, blob) {
@@ -4797,7 +4995,7 @@ window.__ModuleLoader__.load({
             }, h('b', null, step > indexNumber + 1 ? '✓' : indexNumber + 1), name))),
           !loaded ? h('div', { className: 'wb-card' }, h(Skeleton, { rows: 5 })) : stepBody),
         tagEditor ? h(GoalTagEditor, {
-          date, tags, show,
+          date, tags, show, ai,
           onClose: () => setTagEditor(false),
           onSaved: async () => {
             const data = await request(`/report?date=${date}`)
@@ -5075,7 +5273,7 @@ window.__ModuleLoader__.load({
       const [todos, setTodos] = useState([])
       const [viewer, setViewer] = useState(null)
       const [editor, setEditor] = useState(null)
-      const cursorDate = dateOfKey(cursor) ?? new Date()
+      const cursorDate = dateOfKey(cursor) ?? nowInZone()
       const year = cursorDate.getFullYear(); const index = cursorDate.getMonth()
       const cells = useMemo(() => {
         if (view === 'week') {
@@ -5693,10 +5891,9 @@ window.__ModuleLoader__.load({
       const [goalSuggestions, setGoalSuggestions] = useState([])
       const [ignoredSuggestions, setIgnoredSuggestions] = useState(new Set())
       const [suggestOpen, setSuggestOpen] = useState(false)
-      const suggestRef = useRef(null)
+      const [analysisOpen, setAnalysisOpen] = useState(false)
       const activeRef = useRef(null)
       const openSeq = useRef(0)
-      useDismiss(suggestRef, () => setSuggestOpen(false))
       useEffect(() => { activeRef.current = active }, [active])
       const [templateOpen, setTemplateOpen] = useState(false)
       const [summaryOpen, setSummaryOpen] = useState(false)
@@ -5737,7 +5934,7 @@ window.__ModuleLoader__.load({
           const seq = ++openSeq.current
           setActiveKind('日报'); setActive(date); setContent(data.markdown ?? ''); setTags(data.tags ?? [])
           setVersions([]); setVersionIndex(0)
-          setGoalSuggestions([]); setIgnoredSuggestions(new Set()); setSuggestOpen(false)
+          setGoalSuggestions([]); setIgnoredSuggestions(new Set()); setSuggestOpen(false); setAnalysisOpen(false)
           setSourceInfo({ source: data.source ?? null, model: data.model ?? null, updatedAt: data.updatedAt ?? null, mtime: data.mtime ?? 0 })
           setDetailError(null); setEditing(false); setOriginal(data.markdown ?? ''); setMode('md'); setHtml('')
           if (data.markdown?.trim()) {
@@ -5759,7 +5956,7 @@ window.__ModuleLoader__.load({
           openSeq.current += 1
           setActiveKind(kind); setActive(name); setContent(first); setTags(data.tags ?? [])
           setVersions(list); setVersionIndex(0)
-          setGoalSuggestions([]); setIgnoredSuggestions(new Set()); setSuggestOpen(false)
+          setGoalSuggestions([]); setIgnoredSuggestions(new Set()); setSuggestOpen(false); setAnalysisOpen(false)
           setSourceInfo({ source: data.source ?? null, model: data.model ?? null, updatedAt: data.updatedAt ?? null, mtime: data.mtime ?? 0 })
           setDetailError(null); setEditing(false); setOriginal(first); setMode('md'); setHtml('')
         } catch (error) {
@@ -5957,6 +6154,9 @@ window.__ModuleLoader__.load({
           onRemove ? h('button', { onClick: () => onRemove(tag.id), title: '移除' }, '×') : null)),
       )
       const openGoalSuggestions = goalSuggestions.filter((item) => !ignoredSuggestions.has(item.goalId) && !tags.some((tag) => tag.id === item.goalId))
+      useEffect(() => {
+        if (!openGoalSuggestions.length) setSuggestOpen(false)
+      }, [openGoalSuggestions.length])
       const ignoreGoalSuggestion = (item) => {
         setIgnoredSuggestions((current) => new Set(current).add(item.goalId))
       }
@@ -5978,33 +6178,87 @@ window.__ModuleLoader__.load({
           })
         } catch (error) { show(error.message, 'error') }
       }
-      const goalSuggestionItems = openGoalSuggestions.map((item) => h('div', {
-        key: item.goalId,
-        style: { display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--wb-border)', paddingTop: 8 },
-      },
+      const ignoreAllGoalSuggestions = () => {
+        if (!openGoalSuggestions.length) return
+        const count = openGoalSuggestions.length
+        setIgnoredSuggestions((current) => {
+          const next = new Set(current)
+          openGoalSuggestions.forEach((item) => next.add(item.goalId))
+          return next
+        })
+        setSuggestOpen(false)
+        show(`已忽略 ${count} 条关联建议`)
+      }
+      const associateAllGoalSuggestions = async () => {
+        const pending = openGoalSuggestions
+        if (!pending.length) return
+        const previousIds = tags.map((tag) => tag.id)
+        const nextIds = [...new Set([...previousIds, ...pending.map((item) => item.goalId)])]
+        setBusy('suggest')
+        try {
+          const data = await request('/report/tags', { date: active, goalIds: nextIds })
+          setTags(data.tags ?? [])
+          setSuggestOpen(false)
+          await load()
+          const targetDate = active
+          show(`已关联 ${pending.length} 个目标`, 'ok', async () => {
+            try {
+              const back = await request('/report/tags', { date: targetDate, goalIds: previousIds })
+              if (activeRef.current === targetDate) setTags(back.tags ?? [])
+              await load()
+              show('已撤销关联')
+            } catch (error) { show(error.message, 'error') }
+          })
+        } catch (error) { show(error.message, 'error') } finally { setBusy('') }
+      }
+      const suggestionCycles = Object.entries(openGoalSuggestions.reduce((acc, item) => {
+        acc[item.cycle] = (acc[item.cycle] ?? 0) + 1
+        return acc
+      }, {})).map(([cycle, count]) => `${cycle} ${count}`).join(' · ')
+      const goalSuggestionAnalysis = analysisOpen
+        ? h('div', { className: 'wb-goal-sug-analysis' },
+          h('div', { className: 'wb-small' },
+            `日报里有 ${openGoalSuggestions.length} 个目标的可核对依据${suggestionCycles ? `（${suggestionCycles}）` : ''}；每条依据的关键词和原句都能在原文里逐字找到。`),
+          openGoalSuggestions.map((item) => h('div', { key: item.goalId, className: 'wb-goal-sug-why' },
+            h('span', { className: `wb-cycle-badge ${item.cycle}` }, item.cycle),
+            h('span', { style: { flex: 1, minWidth: 0 } }, item.reason || `日报里出现了关键词「${item.keyword}」`),
+            h('span', { className: 'wb-sugtag-lv' }, `把握${item.confidence}`))))
+        : null
+      const goalSuggestionItems = openGoalSuggestions.map((item) => h('div', { key: item.goalId, className: 'wb-goal-sug-item' },
         h('div', { className: 'wb-row', style: { gap: 6, alignItems: 'center' } },
-          h('b', { className: 'wb-small' }, `${item.cycle} · ${item.goalTitle}`),
+          h('span', { className: `wb-cycle-badge ${item.cycle}` }, item.cycle),
+          h('b', { className: 'wb-small', style: { flex: 1, minWidth: 0 } }, item.goalTitle),
           h('span', { className: 'wb-sugtag-lv' }, `把握${item.confidence}`)),
         h('div', { className: 'wb-evquote' }, highlightKeyword(item.quote, item.keyword)),
         h('div', { className: 'wb-row end' },
-          h('button', { className: 'wb-btn sm', onClick: () => ignoreGoalSuggestion(item) }, '忽略'),
-          h('button', { className: 'wb-btn primary sm', onClick: () => associateGoalSuggestion(item) }, '关联'))))
-      const goalSuggestionPopover = suggestOpen
-        ? h('div', { className: 'wb-pop', style: { left: 0, right: 'auto', width: 380, zIndex: 60 } },
-          h('div', { className: 'wb-row', style: { marginBottom: 6 } },
+          h('button', { className: 'wb-btn sm ghost', onClick: () => ignoreGoalSuggestion(item) }, '忽略'),
+          h('button', { className: 'wb-btn primary sm', disabled: busy === 'suggest', onClick: () => associateGoalSuggestion(item) }, '关联'))))
+      const goalSuggestionPanel = suggestOpen && activeKind === '日报' && openGoalSuggestions.length
+        ? h('div', { className: 'wb-goal-sug', id: 'wb-goal-suggest' },
+          h('div', { className: 'wb-goal-sug-head' },
             h('span', { className: 'wb-ai-tag' }, '✦ AI 建议关联'),
+            h('span', { className: 'wb-hint' }, `匹配到 ${openGoalSuggestions.length} 个目标`),
             h('div', { className: 'wb-spacer' }),
             h('button', { className: 'wb-icon-btn', 'aria-label': '关闭建议', title: '关闭', onClick: () => setSuggestOpen(false) }, '×')),
-          goalSuggestionItems,
-          h('span', { className: 'wb-hint' }, '依据全部来自日报里的原句。'))
+          goalSuggestionAnalysis,
+          h('div', { className: 'wb-goal-sug-list' }, goalSuggestionItems),
+          h('div', { className: 'wb-goal-sug-foot' },
+            h('button', {
+              className: 'wb-btn sm ghost', 'aria-expanded': analysisOpen,
+              onClick: () => setAnalysisOpen(!analysisOpen),
+            }, analysisOpen ? '收起分析' : '关联目标分析'),
+            h('button', { className: 'wb-btn sm ghost', onClick: ignoreAllGoalSuggestions }, '忽略全部'),
+            h('div', { className: 'wb-spacer' }),
+            h('button', {
+              className: 'wb-btn primary sm', disabled: busy === 'suggest',
+              onClick: associateAllGoalSuggestions,
+            }, busy === 'suggest' ? '关联中…' : `一键全部关联（${openGoalSuggestions.length}）`)))
         : null
       const goalSuggestionButton = activeKind === '日报' && !aiOffOf(state?.ai) && openGoalSuggestions.length
-        ? h('div', { className: 'wb-rel', ref: suggestRef },
-          h('button', {
-            className: 'wb-btn ai-2 sm', 'aria-haspopup': 'dialog', 'aria-expanded': suggestOpen,
-            onClick: () => setSuggestOpen(!suggestOpen),
-          }, h(SparkIcon), `建议再关联 ${openGoalSuggestions.length} 个目标`),
-          goalSuggestionPopover)
+        ? h('button', {
+          className: 'wb-btn ai-2 sm', 'aria-expanded': suggestOpen, 'aria-controls': 'wb-goal-suggest',
+          onClick: () => setSuggestOpen(!suggestOpen),
+        }, h(SparkIcon), `建议再关联 ${openGoalSuggestions.length} 个目标`, h('span', { className: 'wb-goal-sug-caret' }, suggestOpen ? '▴' : '▾'))
         : null
 
       const shortModel = String(sourceInfo.model ?? '').split('/').pop()
@@ -6016,7 +6270,7 @@ window.__ModuleLoader__.load({
         : sourceInfo.mtime ? formatLocalStamp(new Date(sourceInfo.mtime).toISOString()) : '—'
       const activeLabel = active ? `${activeKind} · ${active}` : '预览'
       return h(React.Fragment, null,
-        h('div', { className: 'wb-reports2', style: { gridTemplateColumns: `${listWidth}px 8px minmax(0,1fr)` } },
+        h('div', { className: `wb-reports2${mode === 'html' ? ' wb-reports-html' : ''}`, style: { gridTemplateColumns: `${listWidth}px 8px minmax(0,1fr)` } },
           h('div', { className: 'wb-card' },
             h('div', { className: 'wb-card-head' },
               h('div', { className: 'wb-card-title' }, '列表'),
@@ -6080,7 +6334,7 @@ window.__ModuleLoader__.load({
               : h(EmptyState, { title: '还没有日报', text: '在今日页点日历里的一天，或新建今天日报，开始记录。' }),
           ),
           h('div', { className: 'wb-split', title: '拖动调整宽度', onMouseDown: startDrag }),
-          h('div', { className: 'wb-card' },
+          h('div', { className: `wb-card${mode === 'html' ? ' wb-report-detail-html' : ''}` },
             detailError
               ? h('div', { className: 'wb-empty-state' },
                 h('b', null, `这份${detailError.kind}暂时打不开`),
@@ -6154,8 +6408,9 @@ window.__ModuleLoader__.load({
                       }) : h('div', { className: 'wb-tags' }, tags.map((tag) => h('span', { key: tag.id, className: 'wb-tag' }, `${tag.cycle} · ${tag.title}`))),
                       activeKind === '日报' ? h('button', { className: 'wb-btn sm ghost', onClick: () => setTagEditor(true) }, '＋ 关联目标') : null,
                       goalSuggestionButton),
+                    goalSuggestionPanel,
                     mode === 'html'
-                      ? h('iframe', { className: 'wb-iframe', srcDoc: html, title: '日报 HTML 预览' })
+                      ? h('iframe', { className: 'wb-iframe wb-iframe-fill', srcDoc: html, title: '日报 HTML 预览' })
                       : content ? renderMarkdown(content) : h('div', { className: 'wb-empty' }, '这一天没有内容。')),
           ),
         ),
@@ -6170,7 +6425,7 @@ window.__ModuleLoader__.load({
           const data = await request(`/report?date=${active}`)
           setTags(data.tags ?? [])
           await load()
-        }, show }) : null,
+        }, show, ai: state.ai }) : null,
         removing ? h(ConfirmModal, {
           title: `删除这份${activeKind}`,
           message: `确定删除 ${active} 的${activeKind}？文件会移除，且不可恢复。`,
@@ -6377,9 +6632,41 @@ window.__ModuleLoader__.load({
         { label: 'AI 更新进度', ai: true, onClick: () => onProgress(target, 'ai') },
         { label: '查看关联日报', onClick: () => onRelated(target) },
         { label: '编辑', onClick: () => onEdit(target) },
-        { label: '＋ 子目标', onClick: () => onAddChild(target) },
+        ...(CHILD_CYCLE[target.cycle] ? [{ label: '＋ 子目标', onClick: () => onAddChild(target) }] : []),
         { label: '删除', danger: true, onClick: () => onDelete(target) },
       ]
+      // 子目标按任意深度递归渲染：年 → 季度 → 月 → 周 四层都能展开，不再固定只画两层。
+      const renderKid = (kid) => {
+        const sub = goals.filter((item) => item.parentId === kid.id)
+        const open = Boolean(openKids[kid.id])
+        return h('div', { key: kid.id, className: 'wb-kr' },
+          h('div', { className: 'wb-kr-head' },
+            h('span', { className: `wb-cycle-badge ${kid.cycle}` }, kid.cycle),
+            h('span', { className: 'wb-kr-title', title: kid.title }, kid.title),
+            h('button', { className: 'wb-kr-pct', title: '更新进度', onClick: () => onProgress(kid, 'manual') }, `${kid.progress}% ▾`),
+            h('div', { className: 'wb-okr-child-actions' },
+              sub.length
+                ? h('button', {
+                  className: 'wb-chip',
+                  title: open ? '收起子目标' : '展开子目标',
+                  style: { display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 650, color: 'var(--wb-accent)', borderColor: 'var(--wb-accent)', background: 'rgba(59,130,246,.10)' },
+                  onClick: () => {
+                    const next = { ...openKids, [kid.id]: !open }
+                    setOpenKids(next)
+                    try { window.localStorage?.setItem(`${expandKey}.kids`, JSON.stringify(next)) } catch { /* 忽略 */ }
+                  },
+                }, open ? '▾ 收起' : `▸ 子目标 ${sub.length}`)
+                : null,
+              h(GoalMenu, { items: common(kid) }),
+            ),
+          ),
+          h('div', { className: 'wb-kr-bar' }, h('i', { style: { width: `${Math.max(0, Math.min(100, kid.progress))}%` } })),
+          sub.length ? h('div', { className: 'wb-small wb-muted' }, kid.manual === true
+            ? '已手动设置进度；子目标变化不会覆盖它'
+            : `由 ${sub.length} 个子目标平均计算；手动更新后以手动值为准`) : null,
+          sub.length && open ? h('div', { className: 'wb-okr-krs' }, sub.map((child) => renderKid(child))) : null,
+        )
+      }
       return h('div', { className: 'wb-okr' },
         h('div', { className: 'wb-okr-head' },
           h('button', { className: 'wb-btn ghost', title: collapsed ? '展开' : '收起', onClick: () => {
@@ -6389,7 +6676,7 @@ window.__ModuleLoader__.load({
           } }, collapsed ? '▸' : '▾'),
           h('span', { className: 'wb-okr-o' }, 'O'),
           h('div', { className: 'wb-okr-title' }, goal.title),
-          h('span', { className: 'wb-badge' }, goal.cycle),
+          h('span', { className: `wb-cycle-badge ${goal.cycle}` }, goal.cycle),
           ...badges,
           h('button', { className: 'wb-okr-pct', title: '更新进度', onClick: () => onProgress(goal, 'manual') }, `${goal.progress}% ▾`),
           h('div', { className: 'wb-okr-actions' },
@@ -6402,46 +6689,7 @@ window.__ModuleLoader__.load({
           ? '已手动设置进度；子目标变化不会覆盖它'
           : `进度由 ${kids.length} 个子目标平均计算；手动更新后以手动值为准`) : null,
         collapsed ? null : hasKids
-          ? h('div', { className: 'wb-okr-krs' },
-            kids.map((kid) => {
-              const kidHasKids = goals.some((item) => item.parentId === kid.id)
-              return h('div', { key: kid.id, className: 'wb-kr' },
-                h('div', { className: 'wb-kr-head' },
-                  h('span', { className: 'wb-kr-label' }, 'KR'),
-                  h('span', { className: 'wb-kr-title', title: kid.title }, kid.title),
-                  h('button', { className: 'wb-kr-pct', title: '更新进度', onClick: () => onProgress(kid, 'manual') }, `${kid.progress}% ▾`),
-                  h('div', { className: 'wb-okr-child-actions' },
-                    goals.some((item) => item.parentId === kid.id)
-                      ? h('button', {
-                        className: 'wb-chip',
-                        title: openKids[kid.id] ? '收起子任务' : '展开子任务',
-                        style: { display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 650, color: 'var(--wb-accent)', borderColor: 'var(--wb-accent)', background: 'rgba(59,130,246,.10)' },
-                        onClick: () => {
-                          const next = { ...openKids, [kid.id]: !openKids[kid.id] }
-                          setOpenKids(next)
-                          try { window.localStorage?.setItem(`${expandKey}.kids`, JSON.stringify(next)) } catch { /* 忽略 */ }
-                        },
-                      }, openKids[kid.id] ? '▾ 收起' : `▸ 子任务 ${goals.filter((item) => item.parentId === kid.id).length}`)
-                      : null,
-                    h(GoalMenu, { items: common(kid) }),
-                  ),
-                ),
-                h('div', { className: 'wb-kr-bar' }, h('i', { style: { width: `${Math.max(0, Math.min(100, kid.progress))}%` } })),
-                kidHasKids ? h('div', { className: 'wb-small wb-muted' }, kid.manual === true
-                  ? '已手动设置进度；子任务变化不会覆盖它'
-                  : `由 ${goals.filter((item) => item.parentId === kid.id).length} 个子目标平均计算；手动更新后以手动值为准`) : null,
-                openKids[kid.id] ? goals.filter((item) => item.parentId === kid.id).map((grandchild) => h('div', { key: grandchild.id, className: 'wb-kr', style: { marginLeft: 14, marginTop: 4 } },
-                  h('div', { className: 'wb-kr-head' },
-                    h('span', { className: `wb-cycle-badge ${grandchild.cycle}` }, grandchild.cycle),
-                    h('span', { className: 'wb-kr-title', title: grandchild.title }, grandchild.title),
-                    h('button', { className: 'wb-kr-pct', title: '更新进度', onClick: () => onProgress(grandchild, 'manual') }, `${grandchild.progress}% ▾`),
-                    h('div', { className: 'wb-okr-child-actions' },
-                      h(GoalMenu, { items: common(grandchild) })),
-                  ),
-                  h('div', { className: 'wb-kr-bar' }, h('i', { style: { width: `${Math.max(0, Math.min(100, grandchild.progress))}%` } })),
-                )) : null,
-              )
-            }))
+          ? h('div', { className: 'wb-okr-krs' }, kids.map((kid) => renderKid(kid)))
           : goal.records?.length
             ? h('div', { className: 'wb-small wb-muted' }, `最近更新：${goal.records[goal.records.length - 1].reason}`)
             : null,
@@ -6460,7 +6708,7 @@ window.__ModuleLoader__.load({
       max += pad
       const span = Math.max(1, max - min)
       const pct = (value) => Math.max(0, Math.min(100, ((value - min) / span) * 100))
-      const todayPct = pct(Date.now())
+      const todayPct = pct((dateOfKey(todayKey())?.getTime() ?? Date.now()) + 43_200_000)
       const fmt = (value) => {
         const d = new Date(value)
         return `${d.getMonth() + 1}-${String(d.getDate()).padStart(2, '0')}`
@@ -6492,22 +6740,71 @@ window.__ModuleLoader__.load({
 
     function formatLocalStamp(value) {
       const text = String(value ?? '')
-      const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(text)
-      if (!match) return text || '—'
-      const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]))
-      const now = new Date()
-      const sameDay = date.toDateString() === now.toDateString()
-      const hhmm = `${match[4]}:${match[5]}`
-      if (sameDay) return `今天 ${hhmm}`
-      const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1)
-      if (date.toDateString() === yesterday.toDateString()) return `昨天 ${hhmm}`
-      return `${match[1]}-${match[2]}-${match[3]} ${hhmm}`
+      let year; let month; let day; let hour; let minute
+      if (/^\d{4}-\d{2}-\d{2}T/.test(text) && /(?:Z|[+-]\d{2}:?\d{2})$/.test(text)) {
+        const date = new Date(text)
+        if (Number.isNaN(date.getTime())) return text || '—'
+        const parts = zoneParts(date)
+        year = parts.year; month = parts.month; day = parts.day; hour = parts.hour; minute = parts.minute
+      } else {
+        const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(text)
+        if (!match) return text || '—'
+        year = Number(match[1]); month = Number(match[2]); day = Number(match[3]); hour = Number(match[4]); minute = Number(match[5])
+      }
+      const key = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      const hhmm = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+      if (key === todayKey()) return `今天 ${hhmm}`
+      if (key === shiftKey(todayKey(), -1)) return `昨天 ${hhmm}`
+      return `${key} ${hhmm}`
     }
 
     function parseKey(key) {
       const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key ?? ''))
       if (!match) return NaN
       return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).getTime()
+    }
+
+    /** 导入预览按树的先序排列（上级在前），并修正 parentIndex；上级周期不比自己高的改为顶层。
+     *  keep 支持「只导入勾选的目标」：被排除的上级会被跳过，子目标改挂到最近的保留上级，避免下标错位。 */
+    function importTreeOrder(list, keep) {
+      const kept = new Set(list.map((_, i) => i).filter((i) => (keep ? keep(i) : true)))
+      const parentOf = (goal, i) => {
+        const pi = goal.parentIndex
+        return pi !== null && pi !== undefined && pi !== i && list[pi] && (CYCLE_RANK[list[pi].cycle] ?? 0) > (CYCLE_RANK[goal.cycle] ?? 0) ? pi : null
+      }
+      const nearestKept = (i) => {
+        let pi = parentOf(list[i], i)
+        const seen = new Set([i])
+        while (pi !== null && !kept.has(pi) && !seen.has(pi)) { seen.add(pi); pi = parentOf(list[pi], pi) }
+        return pi !== null && kept.has(pi) ? pi : null
+      }
+      const parentMap = new Map([...kept].map((i) => [i, nearestKept(i)]))
+      const order = []
+      const visit = (i) => {
+        order.push(i)
+        for (const j of kept) if (parentMap.get(j) === i) visit(j)
+      }
+      for (const i of kept) if (parentMap.get(i) === null) visit(i)
+      const at = new Map(order.map((oldIndex, idx) => [oldIndex, idx]))
+      return order.map((oldIndex) => {
+        const goal = list[oldIndex]
+        const pi = parentMap.get(oldIndex)
+        return { ...goal, parentIndex: pi === null || pi === undefined ? null : at.get(pi) }
+      })
+    }
+
+    /** 某个周期的默认起止日期，锚点用目标原来的开始日期。改周期时同步改日期，避免季度目标留着整年日期。 */
+    function cycleRangeOf(cycle, anchorKey) {
+      const base = dateOfKey(anchorKey) ?? nowInZone()
+      const y = base.getFullYear()
+      if (cycle === '年') return { startDate: keyOf(new Date(y, 0, 1)), endDate: keyOf(new Date(y, 11, 31)) }
+      if (cycle === '季度') {
+        const q = Math.floor(base.getMonth() / 3)
+        return { startDate: keyOf(new Date(y, q * 3, 1)), endDate: keyOf(new Date(y, q * 3 + 3, 0)) }
+      }
+      if (cycle === '月') return { startDate: keyOf(new Date(y, base.getMonth(), 1)), endDate: keyOf(new Date(y, base.getMonth() + 1, 0)) }
+      const monday = new Date(y, base.getMonth(), base.getDate() - ((base.getDay() + 6) % 7))
+      return { startDate: keyOf(monday), endDate: keyOf(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6)) }
     }
 
     function GoalsTab({ refreshState, show, suggestions, onApplySuggestion, onDismissSuggestion, ai }) {
@@ -6525,6 +6822,8 @@ window.__ModuleLoader__.load({
       const [importOpen, setImportOpen] = useState(false)
       const [importText, setImportText] = useState('')
       const [preview, setPreview] = useState([])
+      const [importEditing, setImportEditing] = useState('')
+      const [importCollapsed, setImportCollapsed] = useState({})
       const fileRef = useRef(null)
 
       const load = useCallback(async () => {
@@ -6554,18 +6853,38 @@ window.__ModuleLoader__.load({
       })()
       const openProgress = (goal, tab = 'manual') => setProgress({ goal, tab })
       const off = aiOffOf(ai)
-      const confirmDelete = async () => {
+      const descendantsOf = (rootId) => {
+        const out = []
+        const seen = new Set([rootId])
+        const queue = [rootId]
+        while (queue.length) {
+          const current = queue.shift()
+          for (const goal of goals) {
+            if (goal.parentId === current && !seen.has(goal.id)) {
+              seen.add(goal.id)
+              out.push(goal)
+              queue.push(goal.id)
+            }
+          }
+        }
+        return out
+      }
+      const removingDescendants = removing ? descendantsOf(removing.id) : []
+      const confirmDelete = async (withDescendants = false) => {
         if (!removing) return
         const snapshot = removing
         const childIds = goals.filter((goal) => goal.parentId === snapshot.id).map((goal) => goal.id)
         setBusy('delete')
         try {
-          const data = await request('/goals/delete', { id: snapshot.id })
+          const data = await request('/goals/delete', { id: snapshot.id, withDescendants })
+          const removedGoals = Array.isArray(data.removedGoals) && data.removedGoals.length ? data.removedGoals : [data.removed ?? snapshot]
           setRemoving(null)
           await load(); await refreshState()
-          show(`已删除「${snapshot.title}」，6 秒内可撤销`, 'ok', async () => {
+          const extra = Math.max(0, removedGoals.length - 1)
+          show(`已删除「${snapshot.title}」${withDescendants && extra ? `及 ${extra} 个下级目标` : ''}，6 秒内可撤销`, 'ok', async () => {
             try {
-              await request('/goals', { restore: data.removed ?? snapshot, childIds })
+              if (withDescendants) await request('/goals', { restoreGoals: removedGoals })
+              else await request('/goals', { restore: data.removed ?? snapshot, childIds })
               await load(); await refreshState()
               show('已撤销删除')
             } catch (error) { show(error.message, 'error') }
@@ -6588,7 +6907,7 @@ window.__ModuleLoader__.load({
           if (!payload.text && !payload.files?.length) { show('先粘贴文本或选择文件', 'error'); return }
           const data = await request('/goals/import/parse', payload)
           setPreview((data.goals ?? []).map((goal, index) => ({ ...goal, key: `${index}-${goal.title}` })))
-          show(`拆出 ${data.goals?.length ?? 0} 个目标${data.truncated ? '（文档过长，只处理了前 8 段）' : ''}，确认后保存`)
+          show(`拆出 ${data.goals?.length ?? 0} 个目标${data.truncated ? '（文档过长，只处理了前 8 段）' : ''}${data.partial ? '（模型输出被截断，部分目标可能缺失，可重新拆解）' : ''}，确认后保存`)
         } catch (error) { show(error.message, 'error') } finally { setBusy(''); if (fileRef.current) fileRef.current.value = '' }
       }
 
@@ -6596,7 +6915,7 @@ window.__ModuleLoader__.load({
         if (!preview.length) return
         setBusy('save')
         try {
-          const data = await request('/goals/import/save', { goals: preview.map(({ key, ...rest }) => rest) })
+          const data = await request('/goals/import/save', { goals: importTreeOrder(preview).map(({ key, ...rest }) => rest) })
           setPreview([]); setImportOpen(false); setImportText('')
           await load(); await refreshState()
           show(`已写入 ${data.created.length} 个目标`)
@@ -6639,17 +6958,17 @@ window.__ModuleLoader__.load({
                   onEdit: (target) => setEditing(target),
                   onDelete: (target) => setRemoving(target),
                   onProgress: openProgress,
-                  onAddChild: (target) => setCreating({ parentId: target.id, cycle: target.cycle === '年' ? '月' : '周' }),
+                  onAddChild: (target) => setCreating({ parentId: target.id, cycle: CHILD_CYCLE[target.cycle] ?? '周' }),
                   onRelated: (target) => setRelated(target),
                 }))
                 return h('div', { key: cycle, className: 'wb-cycle' },
-                  h('div', { className: 'wb-cycle-title' }, `${cycle}度目标`),
+                  h('div', { className: 'wb-cycle-title' }, cycle === '季度' ? '季度目标' : `${cycle}度目标`),
                   cycle === '年' ? h('div', { className: 'wb-okr-grid' }, cards) : cards,
                 )
               })
               : h(EmptyState, {
                 title: '还没有目标',
-                text: '把一份计划文档或一段话交给 AI，它会拆成年、月、周目标。',
+                text: '把一份计划文档或一段话交给 AI，它会拆成年、季度、月、周目标。',
                 action: h('div', { className: 'wb-row', style: { justifyContent: 'center' } },
                   h('button', {
                     className: 'wb-btn ai sm', disabled: off, title: off ? `AI 暂时不可用：${aiReasonOf(ai)}` : '导入目标',
@@ -6675,67 +6994,154 @@ window.__ModuleLoader__.load({
           onApplied: async () => { await load(); await refreshState() },
           show,
         }) : null,
-        removing ? h(ConfirmModal, {
-          title: '删除目标',
-          message: `确定删除「${removing.title}」？${(goals.filter((item) => item.parentId === removing.id).length) ? `它的 ${goals.filter((item) => item.parentId === removing.id).length} 个子目标会解除关联，但不会被删除。` : ''}`,
-          busy: busy === 'delete',
-          onCancel: () => setRemoving(null),
-          onConfirm: confirmDelete,
-        }) : null,
-        importOpen ? h(Modal, { title: '导入目标', wide: true, onClose: () => setImportOpen(false) },
-          h('div', { className: 'wb-small', style: { color: 'var(--wb-text-3)' } },
-            '支持 .docx / .xlsx / .pptx / .md / .txt，也可以直接粘贴文字。AI 会拆成年、月、周目标，导入前可以预览和修改。'),
-          h('div', {
-            className: 'wb-srccard', style: { borderStyle: 'dashed', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '18px 14px', cursor: 'pointer' },
-            onClick: () => fileRef.current?.click(),
-            onDragOver: (event) => { event.preventDefault() },
-            onDrop: (event) => { event.preventDefault(); void parseImport(event.dataTransfer?.files) },
+        removing ? (() => {
+          const count = removingDescendants.length
+          const deleting = busy === 'delete'
+          return h(Modal, {
+            title: '删除目标',
+            onClose: () => { if (!deleting) setRemoving(null) },
+            footer: [
+              h('button', { key: 'cancel', className: 'wb-btn', disabled: deleting, onClick: () => setRemoving(null) }, '取消'),
+              count ? h('button', { key: 'single', className: 'wb-btn danger', disabled: deleting, onClick: () => confirmDelete(false) }, '只删除当前目标') : null,
+              h('button', {
+                key: 'delete', className: 'wb-btn danger-solid', disabled: deleting,
+                onClick: () => confirmDelete(count > 0),
+              }, deleting ? '删除中…' : (count ? `一起删除（${count + 1} 个）` : '删除')),
+            ],
           },
-            h('b', null, '拖入文件，或选择文件'),
-            h('span', { className: 'wb-small' }, '支持 .docx / .xlsx / .pptx / .md / .txt，最大 30MB'),
-            h('input', {
-              ref: fileRef, type: 'file', multiple: true, style: { display: 'none' },
-              accept: '.md,.markdown,.txt,.docx,.doc,.xlsx,.xls,.pptx,.ppt',
-              onChange: (event) => parseImport(event.target.files),
-            })),
-          h('textarea', { className: 'wb-textarea', rows: 4, placeholder: '或者粘贴文字，例如：明年要把线上事故减少一半，第一季度完成监控告警改造……', value: importText, onChange: (event) => setImportText(event.target.value) }),
-          off ? h(AiOffHint, { ai, manualText: '可以先关闭这个弹窗，手动新建目标。' }) : null,
-          h('div', { className: 'wb-row end' },
-            h('button', {
-              className: 'wb-btn ai sm', disabled: busy === 'parse' || off,
-              title: off ? `AI 暂时不可用：${aiReasonOf(ai)}` : 'AI 拆解',
-              onClick: () => parseImport(null),
-            }, busy === 'parse' ? h(React.Fragment, null, h(Spinner), '拆解中…') : h(React.Fragment, null, h(SparkIcon), 'AI 拆解')),
-          ),
-          preview.length
-            ? h(React.Fragment, null,
-              h('div', { className: 'wb-sep' }),
-              h('div', { className: 'wb-row' }, h(AiTag, { model: ai?.model }), h('div', { className: 'wb-small wb-muted' }, '拆解结果（可逐条修改 / 删除，确认后才写入 目标.json）')),
-              preview.map((goal, index) => h('div', { key: goal.key, className: 'wb-goal' },
-                h('div', { className: 'wb-row' },
-                  h('span', { className: 'wb-badge' }, `#${index + 1}`),
-                  h('input', { className: 'wb-input', value: goal.title, onChange: (event) => setPreview(preview.map((item, i) => i === index ? { ...item, title: event.target.value } : item)) }),
-                  h('button', { className: 'wb-btn ghost danger', onClick: () => setPreview(preview.filter((_, i) => i !== index)) }, '删除'),
-                ),
-                h('div', { className: 'wb-row' },
-                  h('select', { className: 'wb-select', value: goal.cycle, onChange: (event) => setPreview(preview.map((item, i) => i === index ? { ...item, cycle: event.target.value } : item)) },
-                    CYCLES.map((cycle) => h('option', { key: cycle, value: cycle }, cycle))),
-                  h('input', { className: 'wb-input', value: goal.measure, placeholder: '衡量方式', onChange: (event) => setPreview(preview.map((item, i) => i === index ? { ...item, measure: event.target.value } : item)) }),
+            h('div', { className: 'wb-small' }, `确定删除「${removing.title}」？`),
+            count
+              ? h('div', { className: 'wb-small wb-muted' },
+                `它还有 ${count} 个下级目标。选「只删除当前目标」会解除父子关联并保留下级；选「一起删除」会连同所有下级一起删除。`)
+              : null,
+            h('div', { className: 'wb-small wb-muted' }, '删除后 6 秒内可以在提示条里撤销。'))
+        })() : null,
+        importOpen ? h(Modal, { title: '导入目标', wide: true, onClose: () => setImportOpen(false) },
+          !preview.length ? h(React.Fragment, null,
+            h('div', { className: 'wb-small', style: { color: 'var(--wb-text-3)' } },
+              '支持 .docx / .xlsx / .pptx / .md / .txt，也可以直接粘贴文字。AI 会按 年 → 季度 → 月 → 周 拆解，导入前可以预览和修改。'),
+            h('div', {
+              className: 'wb-srccard', style: { borderStyle: 'dashed', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '18px 14px', cursor: 'pointer' },
+              onClick: () => fileRef.current?.click(),
+              onDragOver: (event) => { event.preventDefault() },
+              onDrop: (event) => { event.preventDefault(); void parseImport(event.dataTransfer?.files) },
+            },
+              h('b', null, '拖入文件，或选择文件'),
+              h('span', { className: 'wb-small' }, '支持 .docx / .xlsx / .pptx / .md / .txt，最大 30MB')),
+            h('textarea', { className: 'wb-textarea', rows: 4, placeholder: '或者粘贴文字，例如：明年要把线上事故减少一半，第一季度完成监控告警改造……', value: importText, onChange: (event) => setImportText(event.target.value) }),
+            off ? h(AiOffHint, { ai, manualText: '可以先关闭这个弹窗，手动新建目标。' }) : null,
+            h('div', { className: 'wb-row end' },
+              h('button', {
+                className: 'wb-btn ai sm', disabled: busy === 'parse' || off,
+                title: off ? `AI 暂时不可用：${aiReasonOf(ai)}` : 'AI 拆解',
+                onClick: () => parseImport(null),
+              }, busy === 'parse' ? h(React.Fragment, null, h(Spinner), '拆解中…') : h(React.Fragment, null, h(SparkIcon), 'AI 拆解')),
+            ),
+          ) : null,
+          h('input', {
+            ref: fileRef, type: 'file', multiple: true, style: { display: 'none' },
+            accept: '.md,.markdown,.txt,.docx,.doc,.xlsx,.xls,.pptx,.ppt',
+            onChange: (event) => parseImport(event.target.files),
+          }),
+          preview.length ? (() => {
+            const patch = (index, fields) => setPreview(preview.map((item, i) => i === index ? { ...item, ...fields } : item))
+            const removeAt = (index) => {
+              const gone = preview[index]
+              const lift = gone.parentIndex === null || gone.parentIndex === undefined ? null : gone.parentIndex
+              setPreview(preview.filter((_, i) => i !== index).map((item) => {
+                let pi = item.parentIndex
+                if (pi === index) pi = lift
+                if (pi !== null && pi !== undefined && pi > index) pi -= 1
+                return { ...item, parentIndex: pi }
+              }))
+              setImportEditing('')
+            }
+            const validParent = (goal, index) => {
+              const pi = goal.parentIndex
+              return pi !== null && pi !== undefined && pi !== index && preview[pi] && (CYCLE_RANK[preview[pi].cycle] ?? 0) > (CYCLE_RANK[goal.cycle] ?? 0) ? pi : null
+            }
+            const kidsOf = (pi) => preview.map((g, i) => ({ g, i })).filter(({ g, i }) => validParent(g, i) === pi)
+            const roots = preview.map((g, i) => ({ g, i })).filter(({ g, i }) => validParent(g, i) === null)
+            const counts = CYCLES.map((c) => [c, preview.filter((g) => g.cycle === c).length]).filter(([, n]) => n)
+            const editor = (goal, index) => h('div', { className: 'wb-imp-edit', onClick: (event) => event.stopPropagation() },
+              h('label', null, '目标',
+                h('input', { className: 'wb-input', autoFocus: true, value: goal.title, onChange: (event) => patch(index, { title: event.target.value }) })),
+              h('label', null, '衡量方式',
+                h('textarea', { className: 'wb-textarea', rows: 2, value: goal.measure, placeholder: '怎样算完成', onChange: (event) => patch(index, { measure: event.target.value }) })),
+              h('div', { className: 'wb-imp-grid' },
+                h('label', { style: { flex: '0 0 96px' } }, '周期',
                   h('select', {
-                    className: 'wb-select', value: goal.parentIndex === null || goal.parentIndex === undefined ? '' : String(goal.parentIndex),
-                    onChange: (event) => setPreview(preview.map((item, i) => i === index ? { ...item, parentIndex: event.target.value === '' ? null : Number(event.target.value) } : item)),
+                    className: 'wb-select', value: goal.cycle,
+                    onChange: (event) => {
+                      const cycle = event.target.value
+                      patch(index, { cycle, ...cycleRangeOf(cycle, goal.startDate) })
+                    },
                   },
-                    h('option', { value: '' }, '无上级'),
-                    preview.map((parent, parentIndex) => parentIndex === index ? null : h('option', { key: parent.key, value: String(parentIndex) }, `#${parentIndex + 1} ${parent.title}`))),
-                ),
-                h('div', { className: 'wb-small wb-muted' }, `${goal.startDate} ~ ${goal.endDate}`),
-              )),
-              h('div', { className: 'wb-row end' },
-                h('button', { className: 'wb-btn', onClick: () => setPreview([]) }, '清空'),
-                h('button', { className: 'wb-btn primary', disabled: busy === 'save', onClick: saveImport }, busy === 'save' ? '保存中…' : '确认写入'),
-              ),
-            )
-            : null,
+                    CYCLES.map((cycle) => h('option', { key: cycle, value: cycle }, cycle)))),
+                h('label', null, '上级目标',
+                  h('select', {
+                    className: 'wb-select', value: validParent(goal, index) === null ? '' : String(goal.parentIndex),
+                    onChange: (event) => patch(index, { parentIndex: event.target.value === '' ? null : Number(event.target.value) }),
+                  },
+                    h('option', { value: '' }, '无上级（顶层目标）'),
+                    preview.map((parent, parentIndex) => parentIndex === index || (CYCLE_RANK[parent.cycle] ?? 0) <= (CYCLE_RANK[goal.cycle] ?? 0)
+                      ? null
+                      : h('option', { key: parent.key, value: String(parentIndex) }, `【${parent.cycle}】${parent.title}`))))),
+              h('div', { className: 'wb-row', style: { alignItems: 'center' } },
+                h('span', { className: 'wb-small wb-muted', style: { flex: 1 } }, `${goal.startDate} ~ ${goal.endDate}`),
+                h('button', { className: 'wb-btn ghost danger sm', onClick: () => removeAt(index) }, '删除'),
+                h('button', { className: 'wb-btn sm', onClick: () => setImportEditing('') }, '完成')))
+            const countDesc = (i) => kidsOf(i).reduce((sum, { i: j }) => sum + 1 + countDesc(j), 0)
+            const shortDate = (d) => String(d ?? '').slice(5).replace('-', '/')
+            const branch = (goal, index, depth, parentGoal) => {
+              const editing = importEditing === goal.key
+              const kids = kidsOf(index)
+              const collapsed = !!importCollapsed[goal.key]
+              const showDate = !parentGoal || parentGoal.startDate !== goal.startDate || parentGoal.endDate !== goal.endDate
+              const level = `lv-${goal.cycle}`
+              const row = h('div', {
+                className: `wb-imp-node ${level}${depth === 0 ? ' root' : ''}${depth === 0 && !kids.length ? ' only' : ''}${editing ? ' editing' : ''}`,
+                onClick: () => setImportEditing(editing ? '' : goal.key),
+                title: '点击编辑',
+              },
+                kids.length
+                  ? h('button', {
+                    className: `wb-imp-caret${collapsed ? ' closed' : ''}`, 'aria-label': collapsed ? '展开' : '收起',
+                    onClick: (event) => { event.stopPropagation(); setImportCollapsed({ ...importCollapsed, [goal.key]: !collapsed }) },
+                  }, '▾')
+                  : h('span', { className: 'wb-imp-caret empty' }),
+                h('span', { className: `wb-imp-cycle c-${goal.cycle}` }, goal.cycle),
+                h('div', { className: 'wb-imp-body' },
+                  h('div', { className: 'wb-imp-title' }, goal.title || '（未命名目标）'),
+                  goal.measure ? h('div', { className: 'wb-imp-measure' }, goal.measure) : null,
+                  collapsed && kids.length ? h('div', { className: 'wb-imp-meta' }, `已收起 ${countDesc(index)} 个下级目标`) : null),
+                showDate ? h('span', { className: 'wb-imp-date' }, depth === 0 ? `${goal.startDate} ~ ${goal.endDate}` : `${shortDate(goal.startDate)} – ${shortDate(goal.endDate)}`) : null,
+                h('div', { className: 'wb-imp-acts', onClick: (event) => event.stopPropagation() },
+                  h('button', { className: 'wb-imp-act', onClick: () => setImportEditing(editing ? '' : goal.key) }, editing ? '收起' : '编辑'),
+                  h('button', { className: 'wb-imp-act danger', onClick: () => removeAt(index) }, '删除')))
+              const children = kids.length && !collapsed
+                ? h('div', { className: 'wb-imp-kids' }, kids.map(({ g, i }) => branch(g, i, depth + 1, goal)))
+                : null
+              if (depth === 0) {
+                return h('div', { key: goal.key, className: 'wb-imp-group' }, row, editing ? editor(goal, index) : null, children)
+              }
+              return h('div', { key: goal.key, className: 'wb-imp-branch' }, row, editing ? editor(goal, index) : null, children)
+            }
+            return h(React.Fragment, null,
+              h('div', { className: 'wb-imp-src' },
+                h('span', null, importText.trim() ? `原文：${importText.trim().replace(/\s+/g, ' ')}` : '已从文件拆解'),
+                h('button', { className: 'wb-imp-act', onClick: () => { setPreview([]); setImportEditing('') } }, '重新输入')),
+              h('div', { className: 'wb-imp-head' },
+                h(AiTag, { model: ai?.model }),
+                h('span', { className: 'wb-imp-count' }, `拆出 ${preview.length} 个目标`),
+                h('span', { className: 'wb-imp-sub' }, '· 年 → 季度 → 月 → 周，点击任意一条可修改，确认后才写入 目标.json')),
+              h('div', { className: 'wb-imp-tree' }, roots.map(({ g, i }) => branch(g, i, 0, null))),
+              h('div', { className: 'wb-imp-foot' },
+                h('div', { className: 'wb-imp-sum' }, '将写入 ', h('b', null, `${preview.length} 个目标`),
+                  counts.length ? `（${counts.map(([c, n]) => `${c} ${n}`).join(' · ')}）` : ''),
+                h('button', { className: 'wb-btn', onClick: () => { setPreview([]); setImportEditing('') } }, '清空'),
+                h('button', { className: 'wb-btn primary', disabled: busy === 'save', onClick: saveImport }, busy === 'save' ? '保存中…' : '确认写入')))
+          })() : null,
         ) : null,
       )
     }
@@ -6957,6 +7363,11 @@ window.__ModuleLoader__.load({
     function SettingsTab({ state, refresh, show, ai }) {
       const [form, setForm] = useState(null)
       const [dirty, setDirty] = useState(false)
+      const [nowTick, setNowTick] = useState(() => new Date())
+      useEffect(() => {
+        const timer = setInterval(() => setNowTick(new Date()), 1000)
+        return () => clearInterval(timer)
+      }, [])
       useEffect(() => {
         if (dirty) return
         setForm({
@@ -6983,8 +7394,12 @@ window.__ModuleLoader__.load({
       }
       const save = async () => {
         try {
+          const city = form.region || form.weatherCity || ''
           const settings = {
             ...form,
+            region: city,
+            weatherCity: city,
+            timezone: tzForRegion(city),
             holidays: String(form.holidaysText ?? '').split(/[\s,，]+/).filter(Boolean),
             extraWorkdays: String(form.extraText ?? '').split(/[\s,，]+/).filter(Boolean),
           }
@@ -7048,12 +7463,30 @@ window.__ModuleLoader__.load({
                   h('span', { style: { minWidth: 24, textAlign: 'center', fontVariantNumeric: 'tabular-nums' } }, String(Number(form.goalStaleDays || 3))),
                   h('button', { className: 'wb-btn sm', onClick: () => set('goalStaleDays', Math.min(30, Number(form.goalStaleDays || 3) + 1)) }, '＋')),
                 h('span', { className: 'wb-small wb-muted' }, '天（1–30）')))),
-          section('地区与时间', '影响天气、时钟和时区。',
-            srow('地区', `当前生效：${form.region || form.weatherCity || '未设置'}`,
-              h('input', {
-                className: 'wb-input', style: { maxWidth: 240 }, value: form.region || form.weatherCity || '', placeholder: '例如：成都 / 华盛顿',
-                onChange: (event) => set('region', event.target.value),
-              })),
+          section('地区与时间', '影响天气、时钟和时区。插件里的日期、时间、提醒和「今天吃什么」都按这里的城市时区计算。',
+            (() => {
+              const regionValue = form.region || form.weatherCity || ''
+              const regionTz = tzForRegion(regionValue)
+              const previewTz = regionTz || (regionValue ? systemTz() : (form.timezone || currentTz()))
+              const localNow = formatDateTimeInZone(nowTick, previewTz)
+              return srow('地区', `当前生效：${regionValue || '未设置'}${regionValue && !regionTz ? '（未识别城市，暂用系统时区）' : ''}`,
+                h('div', { style: { display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' } },
+                  h(React.Fragment, null,
+                    h('input', {
+                      className: 'wb-input', style: { maxWidth: 240 }, list: 'wb-city-list',
+                      value: regionValue, placeholder: '选择或输入城市，例如：成都 / 华盛顿',
+                      onChange: (event) => {
+                        const value = event.target.value
+                        setForm((current) => ({ ...current, region: value, weatherCity: value, timezone: tzForRegion(value) }))
+                        setDirty(true)
+                      },
+                    }),
+                    h('datalist', { id: 'wb-city-list' }, CITY_NAMES.map((city) => h('option', { key: city, value: city })))),
+                  h('div', { className: 'wb-hint', style: { textAlign: 'right' } },
+                    `时区：${previewTz || '跟随系统'}${previewTz ? `（${tzLongName(previewTz)}）` : ''}`),
+                  h('div', { className: 'wb-hint', style: { textAlign: 'right' } },
+                    `当地：${localNow}`)))
+            })(),
             srow('显示天气', '在今日页顶部显示', h(Switch, {
               checked: form.weatherEnabled !== false, label: '显示天气', onChange: (value) => set('weatherEnabled', value),
             }))),
@@ -7173,6 +7606,7 @@ window.__ModuleLoader__.load({
       const refresh = useCallback(async () => {
         try {
           const data = await request('/state')
+          setActiveTz(data.timezone || tzForRegion(data.settings?.region || data.settings?.weatherCity))
           setState(data)
           stateRef.current = data
           setError('')

@@ -8,6 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { checkGoalAlerts } from './lib/goals.js'
 import { createReminders, deliver } from './lib/reminders.js'
+import { resolveTimezone } from './lib/clock.js'
 import { createRoutes } from './lib/routes.js'
 import { Store } from './lib/store.js'
 
@@ -32,9 +33,11 @@ export function apply(ctx, config = {}) {
 
   let stopTimers = null
   ready
-    .then(() => {
+    .then(async () => {
+      // 先把设置里的地区时区装进进程时钟，再启动提醒，避免刚启动时按电脑时区算日期。
+      const settings = await store.getSettings()
       stopTimers = reminders.start()
-      return store.appendLog('插件启动', `数据目录 ${dataDir}`)
+      return store.appendLog('插件启动', `数据目录 ${dataDir}，时区 ${resolveTimezone(settings)}`)
     })
     .catch((error) => {
       console.error('[zhixing] 初始化失败', error)

@@ -24,7 +24,7 @@ The point of 知行 is not another todo list. It is an **AI loop** around the wo
 | Chat sessions, notes, and files | Reads the day's material, keeps the sources, and drafts a structured daily report | A daily report to edit and save |
 | Save the daily report | Turns “tomorrow I will…” into tomorrow's todos, and suggests goal progress from the evidence | Tomorrow's action list + updated goals |
 | Pick a week or a month | Aggregates that period's daily reports into a weekly / monthly report in your voice | A report ready to share |
-| Paste a paragraph or upload a file | Splits it into year → month → week goals with measures, and later updates progress from reports | A goal tree that keeps moving |
+| Paste a paragraph or upload a file | Splits it into year → quarter → month → week goals with measures, and later updates progress from reports | A goal tree that keeps moving |
 
 The AI is **optional**. Without a configured model you can still write reports manually, manage todos and goals, and use the small lucky features. With a model, the loop above is the default way to work.
 
@@ -56,10 +56,10 @@ The AI is **optional**. Without a configured model you can still write reports m
 
 <img src="docs/readme/ai-goals.png" alt="AI breaks a paragraph into goals, and AI updates goal progress from reports" width="100%">
 
-*AI goal breakdown (top) and AI progress suggestions from a report (bottom).*
+*AI goal breakdown (top) and AI progress suggestions from a report (bottom). Screenshots may lag the latest UI.*
 
-- **AI goal breakdown**: paste a paragraph, a plan, or upload a `.md` / `.docx` / `.xlsx` / `.pptx` file. AI splits it into **year → month → week** goals with a measure for each, shows a preview, and only writes `目标.json` after you confirm.
-- A goal tree can be arbitrary depth: yearly goals, monthly goals under them, weekly goals under those. Child progress automatically rolls up; leaf goals can be updated manually or from AI.
+- **AI goal breakdown**: paste a paragraph, a plan, or upload a `.md` / `.docx` / `.xlsx` / `.pptx` file. AI splits it into **year → quarter → month → week** goals with a measure for each, shows a preview, and only writes `目标.json` after you confirm.
+- A goal tree can be arbitrary depth: yearly goals, quarterly goals under them, monthly goals under those, and weekly goals at the leaves. Child progress automatically rolls up; leaf goals can be updated manually or from AI.
 - **AI progress updates**: after a report is saved, AI reads the evidence and suggests a new progress for the leaves it can justify. Each suggestion shows the old → new percentage and the evidence; check the ones to accept, then apply.
 - Goal stall reminders, list / timeline views, and linked reports make the goals part of the daily routine, not a separate spreadsheet.
 - This is the “life / work goals” part: AI generates the structure once, then keeps the progress current as you report.
@@ -93,13 +93,13 @@ The Today banner also has two offline features: **今天吃什么** (a time-awar
 
 1. Install DeepSeek Harness Desktop 0.2.x and make sure plugins are enabled.
 2. Install the plugin:
-   - **npm:** `dsh plugin --profile desktop add dsh-zhixing` (installs 1.0.2), or
+   - **npm:** `dsh plugin --profile desktop add dsh-zhixing` (installs 1.1.0), or
    - **from source:** clone `https://github.com/pawvis/dsh-zhixing.git` and select the cloned folder in **Plugins → Add plugin**.
 3. Restart DSH and open **知行** in the sidebar.
 4. Open **设置** to set reminders, region and clock. If you want AI, make sure a DSH model is configured; the model picker in the plugin header controls which one the plugin uses.
 5. Try the loop: open a day's report, click **生成日报草稿**, edit, save; then open **目标** and use **文字/文件 AI 拆解** on a plan.
 
-> The npm package is published; the latest version is `1.0.2`. The GitHub source is for development or offline install. The plugin works without AI; the AI features simply stay unavailable.
+> The npm package is published; the latest version is `1.1.0`. The GitHub source is for development or offline install. The plugin works without AI; the AI features simply stay unavailable.
 
 ## Privacy & data
 
