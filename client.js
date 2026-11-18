@@ -13,6 +13,9 @@ window.__ModuleLoader__.load({
     const CYCLE_RANK = { 周: 1, 月: 2, 季度: 3, 年: 4 }
     const CHILD_CYCLE = { 年: '季度', 季度: '月', 月: '周' }
     const PARENT_CYCLE = { 周: '月', 月: '季度', 季度: '年' }
+    // 与 lib/levers.js 的 LEVER_MIN / LEVER_MAX 保持一致。
+    const LEVER_MIN = 2
+    const LEVER_MAX = 4
     // 城市 → 时区。插件里所有日期和时间都以设置里的城市时区为准。
     const CITY_TZ = {
       北京: 'Asia/Shanghai', 上海: 'Asia/Shanghai', 广州: 'Asia/Shanghai', 深圳: 'Asia/Shanghai',
@@ -1886,6 +1889,30 @@ window.__ModuleLoader__.load({
       /* ===== 今日页：今天吃什么 / 今日运势（feature-c） ===== */
       .wb-lucky-actions{display:flex;gap:8px;margin-left:auto;align-self:center;flex:0 0 auto;flex-wrap:wrap}
       @media(max-width:1100px){.wb-lucky-actions{flex-basis:100%;justify-content:flex-end;margin-left:0}}
+      .wb-lever-card{padding:12px 14px}
+      .wb-lever-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+      .wb-lever-title-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+      .wb-lever-single{font-size:11px;color:var(--wb-text-3)}
+      .wb-lever-list{display:flex;flex-direction:column;gap:2px}
+      .wb-lever-row{display:flex;align-items:flex-start;gap:9px;padding:7px 8px;border-radius:9px;transition:background .15s ease}
+      .wb-lever-row:hover{background:rgba(127,127,127,.06)}
+      .wb-lever-title{font-size:13px;font-weight:600;line-height:1.5;color:var(--wb-text)}
+      .wb-lever-row.done .wb-lever-title{text-decoration:line-through;color:var(--wb-muted);font-weight:500}
+      .wb-lever-goal{font-size:11px;color:var(--wb-text-3);margin-top:2px}
+      .wb-lever-pending{display:flex;flex-direction:column;gap:8px}
+      .wb-lever-cands{display:flex;flex-direction:column;gap:4px}
+      .wb-lever-cand{display:flex;gap:8px;flex-wrap:wrap;align-items:baseline;font-size:12px;line-height:1.6}
+      .wb-lever-cand-title{font-weight:600}
+      .wb-lever-cand-goal{color:var(--wb-text-3);font-size:11px}
+      .wb-lever-reason{color:var(--wb-text-3);font-size:11px}
+      .wb-lever-pool{display:flex;flex-direction:column;gap:6px;max-height:360px;overflow:auto}
+      .wb-lever-pick{display:flex;align-items:flex-start;gap:9px;padding:8px;border:1px solid var(--wb-border);border-radius:10px}
+      .wb-lever-pick.on{border-color:var(--wb-accent);background:rgba(59,130,246,.06)}
+      .wb-lever-pick.locked{opacity:.7;background:rgba(127,127,127,.04)}
+      .wb-lever-tag{display:inline-block;margin-left:6px;font-size:10px;color:var(--wb-warn,#B45309);background:rgba(180,83,9,.10);border-radius:999px;padding:1px 7px;font-weight:500}
+      @keyframes wb-lever-pop{0%{transform:scale(1)}35%{transform:scale(1.015)}100%{transform:scale(1)}}
+      .wb-lever-row.just-done{animation:wb-lever-pop .6s ease}
+      @media(prefers-reduced-motion:reduce){.wb-lever-row.just-done{animation:none}}
       .wb-lucky-content{display:flex;flex-direction:column;gap:10px}
       .wb-lucky-content .wb-chip:disabled,.wb-lucky-content .wb-seg button:disabled{opacity:.5;cursor:not-allowed}
       .wb-lucky-sub{font-size:12px;color:var(--wb-muted);font-weight:400}
@@ -3718,6 +3745,12 @@ window.__ModuleLoader__.load({
       const todays = all.filter((todo) => todo.date === today)
       const openToday = todays.filter((todo) => todo.status !== '完成')
       const doneToday = todays.filter((todo) => todo.status === '完成')
+      const leverIds = new Set((state.levers?.items ?? []).map((item) => item.todoId))
+      const leverTodos = all.filter((todo) => leverIds.has(todo.id))
+      const chores = [...overdue, ...openToday].filter((todo) => !leverIds.has(todo.id))
+      const choresOverdue = chores.filter((todo) => todo.date < today)
+      const choresToday = chores.filter((todo) => todo.date === today)
+      const doneTodayOther = doneToday.filter((todo) => !leverIds.has(todo.id))
       const openAll = all.filter((todo) => todo.status !== '完成').length
       const upcoming = all.filter((todo) => todo.status !== '完成' && todo.date > today).sort((a, b) => (a.date < b.date ? -1 : 1))
       const byDate = new Map()
@@ -3732,8 +3765,8 @@ window.__ModuleLoader__.load({
         return next
       })
       const exitBatch = () => { setSelecting(false); setSelected(new Set()) }
-      const renderGroup = (key, title, list, { overdue: isOverdue = false } = {}) => {
-        const isCollapsed = collapsed[key] ?? key === 'done'
+      const renderGroup = (key, title, list, { overdue: isOverdue = false, defaultCollapsed = false } = {}) => {
+        const isCollapsed = collapsed[key] ?? (key === 'done' || defaultCollapsed)
         return h('div', { className: 'wb-todo-group', id: key === 'over' ? 'wb-overdue-group' : undefined },
           h('button', {
             type: 'button', className: 'wb-group-title clickable',
@@ -3842,10 +3875,17 @@ window.__ModuleLoader__.load({
                     }),
                     h('button', { className: 'wb-btn sm', type: 'submit', disabled: quickBusy || !quickText.trim() }, quickBusy ? '添加中…' : '添加'),
                   ) : null,
-                  renderGroup('over', '此前未完成', overdue, { overdue: true }),
-                  renderGroup('today', '今日待办', openToday),
+                  leverIds.size
+                    ? h(React.Fragment, null,
+                      leverTodos.length ? renderGroup('levers', '⚡ 今日杠杆', leverTodos) : null,
+                      chores.length
+                        ? renderGroup('chores', `杂务 ${chores.length} 项（此前未完成 ${choresOverdue.length} / 今日 ${choresToday.length}）`, chores, { defaultCollapsed: true })
+                        : null)
+                    : h(React.Fragment, null,
+                      renderGroup('over', '此前未完成', overdue, { overdue: true }),
+                      renderGroup('today', '今日待办', openToday)),
                   [...byDate.keys()].sort().map((key) => renderGroup(`d:${key}`, `之后 · ${friendlyDate(key)}`, byDate.get(key))),
-                  doneToday.length ? renderGroup('done', '已完成', doneToday) : null,
+                  doneTodayOther.length ? renderGroup('done', '已完成', doneTodayOther) : null,
                 ),
             ),
           batchbar,
@@ -4409,6 +4449,7 @@ window.__ModuleLoader__.load({
           onOpenReport: (options) => setReportEditor({ date: state.today, ...options }),
         }) : null,
         h(DailyBanner, { settings: state.settings, show, timezone: state.timezone }),
+        h(V2LeverCard, { levers: state.levers, refresh, show, ai: state.ai, animate: state.settings?.leverAnimation !== false }),
         h(Suggestions, { items: suggestions, onApply: onApplySuggestion, onDismiss: onDismissSuggestion }),
         h('div', { className: `wb-today${narrow ? ' wb-today-narrow' : ''}`, style: narrow ? undefined : { gridTemplateColumns: `${leftWidth}px 8px minmax(0,1fr)` } },
           h('div', { className: 'wb-col' }, h(TodoBoard, { state, refresh, show, ai: state.ai })),
@@ -4425,6 +4466,229 @@ window.__ModuleLoader__.load({
           autoGenerate: Boolean(reportEditor.autoGenerate),
         }) : null,
       )
+    }
+
+    /** 2.0 · 今日杠杆卡（今日页 DailyBanner 下方） */
+    function V2LeverCard({ levers, refresh, show, ai, animate }) {
+      const [busy, setBusy] = useState('')
+      const [adjustOpen, setAdjustOpen] = useState(false)
+      const [justDone, setJustDone] = useState('')
+      const off = aiOffOf(ai)
+      if (!levers) return null
+      const items = levers.items ?? []
+      const candidates = levers.candidates ?? []
+      const done = items.filter((item) => item.status === '完成').length
+      const date = levers.date || todayKey()
+      const run = async (label, fn) => {
+        setBusy(label)
+        try { await fn() } catch (error) { show(error.message, 'error') } finally { setBusy('') }
+      }
+      const toggle = (item) => {
+        const next = item.status === '完成' ? '未做' : '完成'
+        if (next === '完成' && animate !== false) {
+          setJustDone(item.todoId)
+          setTimeout(() => setJustDone(''), 700)
+        }
+        void run(`toggle:${item.todoId}`, async () => {
+          await request('/todos/status', { id: item.todoId, status: next })
+          await refresh()
+        })
+      }
+      const confirmCandidates = () => run('confirm', async () => {
+        const res = await request('/levers/set', {
+          date,
+          items: candidates.map((item) => ({ todoId: item.todoId, goalId: item.goalId })),
+        })
+        await refresh()
+        show(res.belowMin ? '已设 1 个杠杆；通常 2–4 个更合适' : `已设 ${res.items?.length ?? 0} 个杠杆`)
+      })
+      const skip = () => run('skip', async () => {
+        await request('/levers/skip', { date })
+        await refresh()
+        show('今天不设杠杆')
+      })
+      const suggest = () => run('suggest', async () => {
+        if (off) { show(`AI 暂时不可用：${aiReasonOf(ai)}`, 'error'); return }
+        const res = await request('/levers/suggest', { date, force: true })
+        await refresh()
+        show(res.by === 'ai' ? `AI 推荐了 ${res.candidates?.length ?? 0} 条候选` : `本地匹配了 ${res.candidates?.length ?? 0} 条候选`)
+      })
+
+      const body = items.length
+        ? h('div', { className: 'wb-lever-list' }, items.map((item) => h('div', {
+          key: item.todoId,
+          className: `wb-lever-row${item.status === '完成' ? ' done' : ''}${justDone === item.todoId ? ' just-done' : ''}`,
+        },
+        h('button', {
+          type: 'button', className: `wb-check sel${item.status === '完成' ? ' on' : ''}`, role: 'checkbox',
+          'aria-checked': item.status === '完成', 'aria-label': item.status === '完成' ? '标记未完成' : '标记完成',
+          onClick: () => toggle(item),
+        }),
+        h('div', { style: { flex: 1, minWidth: 0 } },
+          h('div', { className: 'wb-lever-title' }, item.content),
+          item.goalTitle ? h('div', { className: 'wb-lever-goal' }, `▸ ${item.goalTitle}`) : null))))
+        : levers.candidateStatus === 'pending' && candidates.length
+          ? h('div', { className: 'wb-lever-pending' },
+            h('div', { className: 'wb-hint' }, `AI 推荐了 ${candidates.length} 条候选，确认后才会写进今天的目标：`),
+            h('div', { className: 'wb-lever-cands' }, candidates.map((item) => h('div', { key: item.todoId, className: 'wb-lever-cand' },
+              h('span', { className: 'wb-lever-cand-title' }, item.content),
+              item.goalTitle ? h('span', { className: 'wb-lever-cand-goal' }, `▸ ${item.goalTitle}`) : null,
+              item.reason ? h('span', { className: 'wb-lever-reason' }, item.reason) : null))),
+            h('div', { className: 'wb-row' },
+              h('button', { className: 'wb-btn sm primary', disabled: Boolean(busy), onClick: confirmCandidates }, busy === 'confirm' ? '设置中…' : '确认'),
+              h('button', { className: 'wb-btn sm', disabled: Boolean(busy), onClick: () => setAdjustOpen(true) }, '改一改'),
+              h('button', { className: 'wb-btn sm ghost', disabled: Boolean(busy), onClick: skip }, '今天不设')))
+          : levers.candidateStatus === 'skipped'
+            ? h('div', { className: 'wb-lever-pending' },
+              h('div', { className: 'wb-hint' }, '今天不设杠杆。'),
+              h('div', { className: 'wb-row' }, h('button', { className: 'wb-btn sm', onClick: () => setAdjustOpen(true) }, '改一改')))
+            : h('div', { className: 'wb-lever-pending' },
+              h('div', { className: 'wb-hint' }, '今天还没设杠杆。先挑 ' + LEVER_MIN + '–' + LEVER_MAX + ' 个能推动目标的待办。'),
+              h('div', { className: 'wb-row' },
+                h('button', {
+                  className: 'wb-btn sm ai', disabled: off || Boolean(busy), title: off ? `AI 暂时不可用：${aiReasonOf(ai)}` : '让 AI 从待办里挑候选',
+                  onClick: suggest,
+                }, h(SparkIcon), busy === 'suggest' ? '挑选中…' : '帮我挑'),
+                h('button', { className: 'wb-btn sm', disabled: Boolean(busy), onClick: () => setAdjustOpen(true) }, '手动选')))
+
+      return h('div', { className: 'wb-card wb-lever-card' },
+        h('div', { className: 'wb-lever-head' },
+          h('div', { className: 'wb-lever-title-wrap' },
+            h('b', null, '⚡ 今日杠杆'),
+            items.length ? h('span', { className: 'wb-badge' }, `${done}/${items.length} 完成`) : null,
+            items.length === 1 ? h('span', { className: 'wb-lever-single' }, '今天 1 个杠杆') : null),
+          h('div', { className: 'wb-spacer' }),
+          h('button', { className: 'wb-btn ghost sm', onClick: () => setAdjustOpen(true) }, items.length ? '调整' : '选择')),
+        body,
+        adjustOpen ? h(V2LeverModal, {
+          levers, refresh, show, onClose: () => setAdjustOpen(false),
+          initialSelected: items.length ? null : candidates.map((item) => item.todoId),
+        }) : null)
+    }
+
+    /** 2.0 · 选择今天的杠杆（候选 + 挂目标 + 新建待办） */
+    function V2LeverModal({ levers, refresh, show, onClose, initialSelected, focusTodoId }) {
+      const data = levers ?? {}
+      const date = data.date || todayKey()
+      const goals = data.goals ?? []
+      const reasons = new Map((data.candidates ?? []).map((item) => [item.todoId, item.reason]))
+      const pool = useMemo(() => {
+        const list = [...(data.pool ?? [])]
+        if (focusTodoId) list.sort((a, b) => (a.id === focusTodoId ? -1 : b.id === focusTodoId ? 1 : 0))
+        return list
+      }, [data.pool, focusTodoId])
+      const locked = (data.items ?? []).filter((item) => item.status === '完成')
+      const lockedIds = new Set(locked.map((item) => item.todoId))
+      const preselect = initialSelected ?? (data.items ?? []).filter((item) => !lockedIds.has(item.todoId)).map((item) => item.todoId)
+      const [selected, setSelected] = useState(() => new Set(preselect))
+      const [goalOf, setGoalOf] = useState(() => {
+        const map = {}
+        for (const todo of data.pool ?? []) map[todo.id] = todo.goalId ?? ''
+        for (const item of data.items ?? []) map[item.todoId] = item.goalId ?? ''
+        for (const item of data.candidates ?? []) if (!(item.todoId in map)) map[item.todoId] = item.goalId ?? ''
+        return map
+      })
+      const [newText, setNewText] = useState('')
+      const [adding, setAdding] = useState(false)
+      const [busy, setBusy] = useState('')
+      const [singleConfirm, setSingleConfirm] = useState(false)
+
+      const toggle = (id) => {
+        setSingleConfirm(false)
+        if (selected.has(id)) {
+          const next = new Set(selected)
+          next.delete(id)
+          setSelected(next)
+          return
+        }
+        if (selected.size + locked.length >= LEVER_MAX) { show(`杠杆最多 ${LEVER_MAX} 个，先放下一个`, 'error'); return }
+        setSelected(new Set(selected).add(id))
+      }
+      const addTodo = async () => {
+        const text = newText.trim()
+        if (!text || adding) return
+        setAdding(true)
+        try {
+          const created = await request('/todos/add', { date, texts: [text], dueDate: date })
+          const item = created.created?.[0]
+          setNewText('')
+          if (item?.id) {
+            setSelected((current) => new Set(current).add(item.id))
+            setGoalOf((current) => ({ ...current, [item.id]: '' }))
+          }
+          await refresh()
+          show('已新建待办并选中')
+        } catch (error) { show(error.message, 'error') } finally { setAdding(false) }
+      }
+      const submit = async () => {
+        if (!selected.size || busy) return
+        if (selected.size === 1 && !singleConfirm) { setSingleConfirm(true); return }
+        setBusy('save')
+        try {
+          const res = await request('/levers/set', {
+            date,
+            items: [...selected].map((id) => ({ todoId: id, goalId: goalOf[id] || null })),
+          })
+          await refresh()
+          show(res.belowMin ? '已设 1 个杠杆；通常 2–4 个更合适' : `已设 ${res.items?.length ?? 0} 个杠杆`)
+          onClose()
+        } catch (error) { show(error.message, 'error') } finally { setBusy('') }
+      }
+
+      const lockedRows = locked.map((item) => h('div', { key: `locked-${item.todoId}`, className: 'wb-lever-pick locked' },
+        h('button', {
+          type: 'button', className: 'wb-check sel on', role: 'checkbox', 'aria-checked': true,
+          'aria-label': '已完成的杠杆', disabled: true,
+        }),
+        h('div', { style: { flex: 1, minWidth: 0 } },
+          h('div', { className: 'wb-lever-title' }, item.content, h('span', { className: 'wb-lever-tag' }, '已完成')),
+          item.goalTitle ? h('div', { className: 'wb-lever-goal' }, `▸ ${item.goalTitle}`) : null)))
+      const rows = pool.length
+        ? pool.map((todo) => h('div', { key: todo.id, className: `wb-lever-pick${selected.has(todo.id) ? ' on' : ''}` },
+          h('button', {
+            type: 'button', className: `wb-check sel${selected.has(todo.id) ? ' on' : ''}`, role: 'checkbox',
+            'aria-checked': selected.has(todo.id), 'aria-label': '选择这个待办',
+            onClick: () => toggle(todo.id),
+          }),
+          h('div', { style: { flex: 1, minWidth: 0 } },
+            h('div', { className: 'wb-lever-title' }, todo.content,
+              todo.postponed ? h('span', { className: 'wb-lever-tag' }, `顺延 ×${todo.postponed}`) : null),
+            h('div', { className: 'wb-row', style: { marginTop: 3 } },
+              h('select', {
+                className: 'wb-select', style: { width: 170 }, value: goalOf[todo.id] ?? '',
+                onChange: (event) => setGoalOf({ ...goalOf, [todo.id]: event.target.value }),
+              },
+                h('option', { value: '' }, '不挂目标'),
+                goals.map((goal) => h('option', { key: goal.id, value: goal.id }, `${goal.cycle} · ${goal.title}`))),
+              reasons.get(todo.id) ? h('span', { className: 'wb-lever-reason' }, `AI：${reasons.get(todo.id)}`) : null))))
+        : h('div', { className: 'wb-hint' }, '今天没有可选的待办，先在下面新建一条。')
+
+      return h(Modal, {
+        title: '选今天的杠杆',
+        size: 'md',
+        onClose,
+        footer: [
+          h('button', {
+            key: 'cancel', className: 'wb-btn',
+            onClick: () => (singleConfirm ? setSingleConfirm(false) : onClose()),
+          }, singleConfirm ? '再选选' : '取消'),
+          h('button', {
+            key: 'ok', className: 'wb-btn primary', disabled: !selected.size || Boolean(busy), onClick: submit,
+          }, busy === 'save' ? '保存中…' : singleConfirm ? '就这样' : `确认 ${selected.size} 个`),
+        ],
+      },
+      h('div', { className: 'wb-hint', style: { marginBottom: 8 } },
+        `每天 ${LEVER_MIN}–${LEVER_MAX} 个能推动目标的待办；已选 ${selected.size + locked.length} 个${locked.length ? `（其中 ${locked.length} 个已完成）` : ''}。`),
+      singleConfirm ? h('div', { className: 'wb-warnbox', style: { marginBottom: 8 } },
+        h('span', { style: { flex: 1 } }, '通常 2–4 个更合适，确定只设 1 个吗？')) : null,
+      h('div', { className: 'wb-lever-pool' }, [...lockedRows, ...rows]),
+      h('div', { className: 'wb-row', style: { marginTop: 10 } },
+        h('input', {
+          className: 'wb-input', placeholder: '新建一条待办并设为杠杆', value: newText,
+          onChange: (event) => setNewText(event.target.value),
+          onKeyDown: (event) => { if (event.key === 'Enter') { event.preventDefault(); void addTodo() } },
+        }),
+        h('button', { className: 'wb-btn sm', disabled: adding || !newText.trim(), onClick: () => void addTodo() }, adding ? '添加中…' : '添加')))
     }
 
     function markdownToHtml(markdown) {
@@ -7606,6 +7870,13 @@ window.__ModuleLoader__.load({
                   h('span', { style: { minWidth: 24, textAlign: 'center', fontVariantNumeric: 'tabular-nums' } }, String(Number(form.goalStaleDays || 3))),
                   h('button', { className: 'wb-btn sm', onClick: () => set('goalStaleDays', Math.min(30, Number(form.goalStaleDays || 3) + 1)) }, '＋')),
                 h('span', { className: 'wb-small wb-muted' }, '天（1–30）')))),
+          section('杠杆', '每天 2–4 个能推动目标的待办；AI 只给候选，确认后才写入。',
+            srow('完成动效', '完成杠杆时播放一个轻量动画', h(Switch, {
+              checked: form.leverAnimation !== false, label: '完成动效', onChange: (value) => set('leverAnimation', value),
+            })),
+            srow('早安只推杠杆', '关闭后早安通知还会列出当天待办', h(Switch, {
+              checked: form.leverMorningOnly !== false, label: '早安只推杠杆', onChange: (value) => set('leverMorningOnly', value),
+            }))),
           section('地区与时间', '影响天气、时钟和时区。插件里的日期、时间、提醒和「今天吃什么」都按这里的城市时区计算。',
             (() => {
               const regionValue = form.region || form.weatherCity || ''
