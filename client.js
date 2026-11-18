@@ -4538,14 +4538,20 @@ window.__ModuleLoader__.load({
         })
       }
       if (!data?.exists) {
-        return h('div', { className: 'wb-card wb-northstar' },
-          h('div', { className: 'wb-ns-head' },
-            h('div', { className: 'wb-card-title' }, '北极星 🔒'),
-            h('div', { className: 'wb-spacer' })),
-          h('div', { className: 'wb-empty-state' },
-            h('b', null, '以后再写也可以'),
-            h('div', { className: 'wb-small' }, '用几句话写下你不想变成什么样、想往哪去、要成为什么样的人。只存本机，AI 不会代写。'),
-            h('button', { className: 'wb-btn primary sm', onClick: () => setWizard(true) }, '写北极星')))
+        return h(React.Fragment, null,
+          h('div', { className: 'wb-card wb-northstar' },
+            h('div', { className: 'wb-ns-head' },
+              h('div', { className: 'wb-card-title' }, '北极星 🔒'),
+              h('div', { className: 'wb-spacer' })),
+            h('div', { className: 'wb-empty-state' },
+              h('b', null, '以后再写也可以'),
+              h('div', { className: 'wb-small' }, '用几句话写下你不想变成什么样、想往哪去、要成为什么样的人。只存本机，AI 不会代写。'),
+              h('button', { className: 'wb-btn primary sm', onClick: () => setWizard(true) }, '写北极星'))),
+          wizard ? h(NorthStarWizard, {
+            data, onClose: () => setWizard(false),
+            onSaved: async () => { await load() },
+            show,
+          }) : null)
       }
 
       return h('div', null,
