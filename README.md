@@ -90,6 +90,14 @@ The Today banner also has two offline features: **今天吃什么** (a time-awar
 
 <img src="docs/readme/lucky.png" alt="今天吃什么, 今日运势 sign, tarot and zodiac" width="65%">
 
+## What's new in 2.0
+
+- **Daily levers**: pick 2–4 lever-moving tasks a day; AI suggests, you confirm; everything else folds into chores.
+- **North Star**: anti-vision, one-line vision, identity statements and rules — local-only Markdown, blurred by default, never AI-written.
+- **Weekly drift report**: every Sunday 20:00, evidence per goal plus lever completion, with up to 3 actionable suggestions. Team/manager summaries never include any of it.
+- **Today's Boss**: a small button on the today page showing which monthly goal needs the next hit.
+- **Local usage stats**: the last 4 weeks of numbers in Settings — counts only, no content.
+
 ## Quick start
 
 1. Install DeepSeek Harness Desktop 0.2.x and make sure plugins are enabled.

@@ -108,8 +108,14 @@ $DSH_HOME/data/知行/
 ├── 汇总/YYYY-Www.md         # 周报 / 月报
 ├── log.md                   # 时间 | 动作 | 结果
 ├── 待办与目标总览.md        # 每次改 json 后重写的只读镜像
-├── settings.json            # 提醒时间、节假日、模型选择、主题
+├── settings.json            # 提醒时间、节假日、模型选择、主题、隐私开关
 ├── state.json               # 提醒去重、AI 计数、页面心跳
+├── 北极星/北极星.md          # 2.0 反愿景 / 愿景 / 身份宣言 / 规则（人生面）
+├── 北极星/身份证据.md        # 2.0 身份证据（人生面）
+├── 偏航/YYYY-Www.md          # 2.0 偏航报告（人生面）
+├── .internal/levers.json     # 2.0 今日杠杆
+├── .internal/drift.json      # 2.0 偏航统计快照
+├── .internal/metrics.json    # 2.0 本地使用统计（只有数字）
 └── .internal/               # 采集缓存与待确认建议（可删）
 ```
 
