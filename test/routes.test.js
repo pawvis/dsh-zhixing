@@ -83,3 +83,18 @@ test('/debug/* 在 ZHIXING_DEBUG=1 时可用', async (t) => {
   const res = await request(handler, { method: 'GET', url: '/api/zhixing/debug/state' })
   assert.equal(res.status, 200)
 })
+
+test('目标导入保存会带上详细说明，读回来也还在', async (t) => {
+  const handler = await setup(t)
+  const saved = await request(handler, {
+    method: 'POST',
+    url: '/api/zhixing/goals/import/save',
+    body: { goals: [{ title: '华东客户回访', detail: '覆盖华东区 20 家重点客户，输出改进报告', cycle: '月', startDate: '2026-11-01', endDate: '2026-11-30', measure: '回访 20 家', parentIndex: null }] },
+  })
+  assert.equal(saved.status, 200)
+  const created = JSON.parse(saved.payload).created[0]
+  assert.equal(created.detail, '覆盖华东区 20 家重点客户，输出改进报告')
+
+  const list = await request(handler, { method: 'GET', url: '/api/zhixing/goals' })
+  assert.equal(JSON.parse(list.payload).goals[0].detail, '覆盖华东区 20 家重点客户，输出改进报告')
+})

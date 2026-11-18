@@ -113,3 +113,38 @@ test('长文档拆目标：引用不存在的全局序号时保持顶层，目�
   const quarter = result.goals.find((goal) => goal.title === 'Q1 增长')
   assert.equal(quarter.parentIndex, null)
 })
+
+test('AI 拆解：短标题 + 详细说明原样进结果，不额外调用缩写', async () => {
+  const reply = JSON.stringify({
+    goals: [{ title: '华东客户回访', detail: '覆盖华东区 20 家重点客户，输出改进报告', cycle: '月', startDate: '2026-11-01', endDate: '2026-11-30', measure: '回访 20 家', parentIndex: null }],
+  })
+  const ctx = fakeCtx([reply])
+  const result = await decomposeGoals(ctx, '访问华东客户', { date: '2026-11-17' })
+  assert.equal(ctx.calls.length, 1)
+  assert.equal(result.goals[0].title, '华东客户回访')
+  assert.equal(result.goals[0].detail, '覆盖华东区 20 家重点客户，输出改进报告')
+})
+
+test('AI 自动缩写过长标题，把细节转进详细说明', async () => {
+  const longTitle = '完成2026年第一季度华东区重点客户回访并输出改进报告'
+  const reply = (call) => (call === 1
+    ? JSON.stringify({ goals: [{ title: longTitle, detail: '', cycle: '季度', startDate: '2026-01-01', endDate: '2026-03-31', measure: '回访 20 家', parentIndex: null }] })
+    : JSON.stringify({ items: [{ index: 0, title: '华东客户回访', detail: '2026 年 Q1 覆盖华东区重点客户 20 家，输出改进报告' }] }))
+  const ctx = fakeCtx(reply)
+  const result = await decomposeGoals(ctx, '第一季度回访华东客户', { date: '2026-01-02' })
+  assert.equal(ctx.calls.length, 2, '长标题应该触发一次缩写调用')
+  assert.match(ctx.calls[1].user, /华东客户回访|完成2026年/)
+  assert.equal(result.goals[0].title, '华东客户回访')
+  assert.match(result.goals[0].detail, /华东区重点客户/)
+  assert.ok(Array.from(result.goals[0].title).length <= 20)
+})
+
+test('AI 缩写失败或返回更长标题时保持原标题，目标不丢', async () => {
+  const longTitle = '把公司所有产品的线上事故数量在明年下降一半并建立监控告警体系'
+  const reply = (call) => (call === 1
+    ? JSON.stringify({ goals: [{ title: longTitle, detail: '', cycle: '年', startDate: '2026-01-01', endDate: '2026-12-31', measure: '事故下降 50%', parentIndex: null }] })
+    : JSON.stringify({ items: [{ index: 0, title: longTitle, detail: '' }] }))
+  const result = await decomposeGoals(fakeCtx(reply), '明年事故减半', { date: '2026-01-02' })
+  assert.equal(result.goals.length, 1)
+  assert.equal(result.goals[0].title, longTitle)
+})

@@ -1518,6 +1518,7 @@ window.__ModuleLoader__.load({
       .wb-okr-bar{height:6px;border-radius:999px;background:rgba(127,127,127,.16);overflow:hidden}
       .wb-okr-bar>i{display:block;height:100%;background:var(--wb-accent);border-radius:999px}
       .wb-okr-measure{font-size:11px;color:var(--wb-muted)}
+      .wb-okr-detail{margin-top:3px;font-size:11px;color:var(--wb-text-3);line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
       .wb-okr-krs{display:flex;flex-direction:column;gap:9px;margin-top:2px;padding-left:13px;border-left:1px dashed var(--wb-border)}
       .wb-kr{display:flex;flex-direction:column;gap:4px}
       .wb-kr-head{display:flex;align-items:center;gap:8px;font-size:12px}
@@ -2953,6 +2954,7 @@ window.__ModuleLoader__.load({
       const derivedCycle = goal?.cycle ?? cycle ?? '周'
       const [form, setForm] = useState({
         title: goal?.title ?? initialTitle ?? '',
+        detail: goal?.detail ?? '',
         cycle: derivedCycle,
         startDate: goal?.startDate ?? '',
         endDate: goal?.endDate ?? '',
@@ -3022,6 +3024,7 @@ window.__ModuleLoader__.load({
         setForm((current) => ({
           ...current,
           title: item.title,
+          detail: item.detail ?? '',
           cycle: item.cycle,
           startDate: item.startDate,
           endDate: item.endDate,
@@ -3067,7 +3070,10 @@ window.__ModuleLoader__.load({
         h('div', { className: 'wb-form-grid' },
           h('label', { className: 'wb-form-field full' }, '目标标题',
             h('input', { id: 'goal-title', className: `wb-input${errors.title ? ' invalid' : ''}`, value: form.title, autoFocus: true, placeholder: '例如：完成登录改造', onChange: (event) => { set('title', event.target.value); if (errors.title) setErrors((current) => ({ ...current, title: '' })) } }),
-            errors.title ? h('div', { className: 'wb-field-error' }, errors.title) : null),
+            errors.title ? h('div', { className: 'wb-field-error' }, errors.title) : null,
+            h('div', { className: 'wb-hint' }, '建议 20 字以内写结果；背景、具体范围、做法和交付物写到下面的「详细说明」。')),
+          h('label', { className: 'wb-form-field full' }, '详细说明',
+            h('textarea', { id: 'goal-detail', className: 'wb-textarea', rows: 3, value: form.detail ?? '', placeholder: '这项工作的具体内容、背景或交付物（可留空）', onChange: (event) => set('detail', event.target.value) })),
           h('label', { className: 'wb-form-field' }, '周期',
             h('select', { className: 'wb-select', value: form.cycle, onChange: (event) => changeCycle(event.target.value) },
               choices.map((item) => h('option', { key: item, value: item }, item)))),
@@ -3132,7 +3138,8 @@ window.__ModuleLoader__.load({
                     },
                       CYCLES.map((cycle) => h('option', { key: cycle, value: cycle }, cycle))),
                     h('input', { className: 'wb-input', value: item.title, onChange: (event) => setPreview(preview.map((entry, i) => i === index ? { ...entry, title: event.target.value } : entry)) })),
-                  h('input', { className: 'wb-input', value: item.measure ?? '', placeholder: '衡量方式', onChange: (event) => setPreview(preview.map((entry, i) => i === index ? { ...entry, measure: event.target.value } : entry)) })),
+                  h('input', { className: 'wb-input', value: item.measure ?? '', placeholder: '衡量方式', onChange: (event) => setPreview(preview.map((entry, i) => i === index ? { ...entry, measure: event.target.value } : entry)) }),
+                  h('textarea', { className: 'wb-textarea', rows: 2, value: item.detail ?? '', placeholder: '详细说明（具体内容 / 背景 / 交付物，可留空）', onChange: (event) => setPreview(preview.map((entry, i) => i === index ? { ...entry, detail: event.target.value } : entry)) })),
                 h('button', { className: 'wb-btn sm', onClick: () => fill(item) }, '填入表单'),
                 h('button', { className: 'wb-icon-btn', title: '删除', style: { color: 'var(--wb-danger)' }, onClick: () => setPreview(preview.filter((_, i) => i !== index)) }, h(TrashIcon)),
               ))) : null,
@@ -6649,7 +6656,7 @@ window.__ModuleLoader__.load({
         return h('div', { key: kid.id, className: 'wb-kr' },
           h('div', { className: 'wb-kr-head' },
             h('span', { className: `wb-cycle-badge ${kid.cycle}` }, kid.cycle),
-            h('span', { className: 'wb-kr-title', title: kid.title }, kid.title),
+            h('span', { className: 'wb-kr-title', title: kid.detail ? `${kid.title}｜${kid.detail}` : kid.title }, kid.title),
             h('button', { className: 'wb-kr-pct', title: '更新进度', onClick: () => onProgress(kid, 'manual') }, `${kid.progress}% ▾`),
             h('div', { className: 'wb-okr-child-actions' },
               sub.length
@@ -6692,6 +6699,7 @@ window.__ModuleLoader__.load({
         ),
         h('div', { className: 'wb-okr-bar' }, h('i', { style: { width: `${Math.max(0, Math.min(100, goal.progress))}%` } })),
         h('div', { className: 'wb-okr-measure' }, `衡量：${goal.measure} · ${goal.startDate} ~ ${goal.endDate} · 更新于 ${goal.updatedAt}`),
+        goal.detail ? h('div', { className: 'wb-okr-detail', title: goal.detail }, goal.detail) : null,
         hasKids ? h('div', { className: 'wb-small wb-muted' }, goal.manual === true
           ? '已手动设置进度；子目标变化不会覆盖它'
           : `进度由 ${kids.length} 个子目标平均计算；手动更新后以手动值为准`) : null,
@@ -7073,6 +7081,8 @@ window.__ModuleLoader__.load({
             const editor = (goal, index) => h('div', { className: 'wb-imp-edit', onClick: (event) => event.stopPropagation() },
               h('label', null, '目标',
                 h('input', { className: 'wb-input', autoFocus: true, value: goal.title, onChange: (event) => patch(index, { title: event.target.value }) })),
+              h('label', null, '详细说明',
+                h('textarea', { className: 'wb-textarea', rows: 3, value: goal.detail ?? '', placeholder: '具体内容、背景或交付物（可留空）', onChange: (event) => patch(index, { detail: event.target.value }) })),
               h('label', null, '衡量方式',
                 h('textarea', { className: 'wb-textarea', rows: 2, value: goal.measure, placeholder: '怎样算完成', onChange: (event) => patch(index, { measure: event.target.value }) })),
               h('div', { className: 'wb-imp-grid' },
@@ -7121,6 +7131,7 @@ window.__ModuleLoader__.load({
                 h('div', { className: 'wb-imp-body' },
                   h('div', { className: 'wb-imp-title' }, goal.title || '（未命名目标）'),
                   goal.measure ? h('div', { className: 'wb-imp-measure' }, goal.measure) : null,
+                  goal.detail ? h('div', { className: 'wb-imp-measure' }, goal.detail) : null,
                   collapsed && kids.length ? h('div', { className: 'wb-imp-meta' }, `已收起 ${countDesc(index)} 个下级目标`) : null),
                 showDate ? h('span', { className: 'wb-imp-date' }, depth === 0 ? `${goal.startDate} ~ ${goal.endDate}` : `${shortDate(goal.startDate)} – ${shortDate(goal.endDate)}`) : null,
                 h('div', { className: 'wb-imp-acts', onClick: (event) => event.stopPropagation() },
