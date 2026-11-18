@@ -59,6 +59,7 @@ The AI is **optional**. Without a configured model you can still write reports m
 *AI goal breakdown (top) and AI progress suggestions from a report (bottom). Screenshots may lag the latest UI.*
 
 - **AI goal breakdown**: paste a paragraph, a plan, or upload a `.md` / `.docx` / `.xlsx` / `.pptx` file. AI splits it into **year → quarter → month → week** goals with a measure for each, shows a preview, and only writes `目标.json` after you confirm. Titles stay short (≤ 20 characters); the specifics go into each goal's **详细说明 (details)** field, and over-long titles are automatically abbreviated by AI before the preview.
+- **AI batch progress**: on the goals page, **AI 更新进度** evaluates every leaf goal against recent daily reports; nothing runs until you click **开始评估**, and progress is written only after you confirm the selected suggestions (max +30% per goal).
 - A goal tree can be arbitrary depth: yearly goals, quarterly goals under them, monthly goals under those, and weekly goals at the leaves. Child progress automatically rolls up; leaf goals can be updated manually or from AI.
 - **AI progress updates**: after a report is saved, AI reads the evidence and suggests a new progress for the leaves it can justify. Each suggestion shows the old → new percentage and the evidence; check the ones to accept, then apply.
 - Goal stall reminders, list / timeline views, and linked reports make the goals part of the daily routine, not a separate spreadsheet.

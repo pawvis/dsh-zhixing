@@ -6626,6 +6626,120 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** 一次性更新所有叶子目标的进度：AI 读取最近的日报 / 汇总，给出建议，确认后批量写入。 */
+    function BatchProgressModal({ ai, onClose, onApplied, show }) {
+      const off = aiOffOf(ai)
+      const [phase, setPhase] = useState('idle')
+      const [suggestions, setSuggestions] = useState([])
+      const [selected, setSelected] = useState(new Set())
+      const [total, setTotal] = useState(0)
+      const [busy, setBusy] = useState('')
+      const [error, setError] = useState('')
+
+      const evaluate = async () => {
+        if (off) { setPhase('done'); return }
+        setPhase('running'); setError(''); setBusy('evaluate')
+        try {
+          const data = await request('/goals/ai-progress-batch', {})
+          const list = (data.suggestions ?? []).map((item) => ({ ...item, checked: true }))
+          setSuggestions(list)
+          setSelected(new Set(list.map((_, index) => index)))
+          setTotal(data.total ?? list.length)
+          setPhase('done')
+          if (!list.length) show('AI 这次没有找到可更新的进度')
+        } catch (err) {
+          setPhase('idle')
+          setError(err.message)
+        } finally { setBusy('') }
+      }
+
+      const apply = async () => {
+        const picked = suggestions.filter((_, index) => selected.has(index))
+        if (!picked.length || busy) return
+        setBusy('apply')
+        try {
+          const data = await request('/goals/ai-progress-batch/apply', {
+            items: picked.map((item) => ({ goalId: item.id, progress: item.to, reason: item.reason })),
+          })
+          await onApplied?.()
+          show(`已更新 ${data.updated?.length ?? 0} 个目标的进度`)
+          onClose()
+        } catch (err) { setError(err.message) } finally { setBusy('') }
+      }
+
+      const toggle = (index) => setSelected((current) => {
+        const next = new Set(current)
+        if (next.has(index)) next.delete(index); else next.add(index)
+        return next
+      })
+
+      const action = phase === 'running'
+        ? { label: '评估中…', disabled: true }
+        : phase === 'idle' && error
+          ? { label: '重试', onClick: () => void evaluate() }
+          : phase === 'idle'
+            ? { label: '开始评估', onClick: () => void evaluate() }
+            : suggestions.length
+              ? { label: busy === 'apply' ? '更新中…' : `一键更新选中（${selected.size}）`, onClick: apply, disabled: !selected.size }
+              : { label: '重新评估', onClick: () => void evaluate() }
+
+      const body = off
+        ? h(AiOffHint, { ai, manualText: '可以在单个目标上用「AI 更新进度」或「手工更新进度」。' })
+        : phase === 'running'
+          ? h('div', { className: 'wb-ai-panel' },
+            h('div', { className: 'wb-ai-steps' }, h('span', { className: 'wb-ai-step on' }, h(Spinner), 'AI 正在读取最近的日报和汇总…')),
+            h('div', { className: 'wb-progress ai' }, h('i', { style: { width: '55%' } })),
+            h('div', { className: 'wb-hint' }, `${String(ai?.model ?? '').split('/').pop() || '模型'} 正在评估所有目标的进度，通常需要 10–20 秒`))
+          : phase === 'done'
+            ? suggestions.length
+              ? h(React.Fragment, null,
+                h('div', { className: 'wb-row', style: { marginBottom: 4 } },
+                  h(AiTag, { model: ai?.model }),
+                  h('span', { className: 'wb-hint' }, `扫描 ${total} 个目标，建议更新 ${suggestions.length} 个`),
+                  h('div', { className: 'wb-spacer' }),
+                  h('button', { className: 'wb-btn ghost sm', onClick: () => void evaluate() }, '重新评估'),
+                  h('button', {
+                    className: 'wb-btn ghost sm',
+                    onClick: () => setSelected(selected.size === suggestions.length ? new Set() : new Set(suggestions.map((_, index) => index))),
+                  }, selected.size === suggestions.length ? '全部取消' : '全选')),
+                h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 380, overflow: 'auto' } },
+                  suggestions.map((item, index) => h('div', { key: `${item.id}-${index}`, className: 'wb-ai-item' },
+                    h('button', {
+                      type: 'button', className: `wb-check sel${selected.has(index) ? ' on' : ''}`, role: 'checkbox',
+                      'aria-checked': selected.has(index), 'aria-label': '选择这条建议',
+                      onClick: () => toggle(index),
+                    }),
+                    h('div', { style: { flex: 1, minWidth: 0 } },
+                      h('div', { className: 'wb-row', style: { gap: 6 } },
+                        h('span', { className: 'wb-small', style: { fontWeight: 600 } }, item.title),
+                        item.cycle ? h('span', { className: 'wb-small wb-muted' }, item.cycle) : null),
+                      h('div', { className: 'wb-small wb-muted' }, `${item.from}% → ${item.to}%`),
+                      h('div', { className: 'wb-hint' }, `依据：${item.reason || '根据日报和周报的推进'}`))))))
+              : h('div', { className: 'wb-empty-state' },
+                h('b', null, '没有找到可更新的进度'),
+                h('div', { className: 'wb-small' }, '日报和周报里暂时没有能支撑目标进度变化的内容。'))
+            : error
+              ? h('div', { className: 'wb-empty-state' },
+                h('b', null, '评估失败'),
+                h('div', { className: 'wb-small' }, error))
+              : h('div', { className: 'wb-hint' }, 'AI 会读取最近的日报和汇总，为每个目标给出建议进度；你确认后才会写入，最多 +30%。点下方「开始评估」才会调用 AI。')
+
+      return h(Modal, {
+        title: 'AI 更新进度 · 所有目标',
+        size: 'md',
+        onClose,
+        footer: [
+          h('button', { key: 'cancel', className: 'wb-btn', onClick: onClose }, '取消'),
+          h('button', {
+            key: 'action', className: 'wb-btn ai', disabled: off || Boolean(action.disabled), onClick: action.onClick,
+          }, action.label),
+        ],
+      },
+        body,
+        error && phase === 'done' ? h('div', { className: 'wb-field-error', style: { marginTop: 8 } }, error) : null,
+      )
+    }
+
     function GoalCard({ goal, goals, alerts, onEdit, onDelete, onProgress, onAddChild, onRelated }) {
       const kids = goals.filter((item) => item.parentId === goal.id)
       const hasKids = kids.length > 0
@@ -6835,6 +6949,7 @@ window.__ModuleLoader__.load({
       const [progress, setProgress] = useState(null)
       const [busy, setBusy] = useState('')
       const [importOpen, setImportOpen] = useState(false)
+      const [batchProgress, setBatchProgress] = useState(false)
       const [importText, setImportText] = useState('')
       const [preview, setPreview] = useState([])
       const [importEditing, setImportEditing] = useState('')
@@ -6949,6 +7064,10 @@ window.__ModuleLoader__.load({
             h('div', { className: 'wb-spacer' }),
             h('button', { className: 'wb-icon-btn', title: '刷新', 'aria-label': '刷新', onClick: load }, h(RefreshIcon)),
             h('button', {
+              className: 'wb-btn ai sm', disabled: off, title: off ? `AI 暂时不可用：${aiReasonOf(ai)}` : '让 AI 读取最近的日报和汇总，一次性更新所有目标的进度',
+              onClick: () => setBatchProgress(true),
+            }, h(SparkIcon), 'AI 更新进度'),
+            h('button', {
               className: 'wb-btn ai-2 sm', disabled: off, title: off ? `AI 暂时不可用：${aiReasonOf(ai)}` : '导入目标',
               onClick: () => setImportOpen(!importOpen),
             }, h(SparkIcon), '导入目标'),
@@ -7006,6 +7125,12 @@ window.__ModuleLoader__.load({
         progress ? h(ProgressModal, {
           goal: progress.goal, initialTab: progress.tab, ai,
           onClose: () => setProgress(null),
+          onApplied: async () => { await load(); await refreshState() },
+          show,
+        }) : null,
+        batchProgress ? h(BatchProgressModal, {
+          ai,
+          onClose: () => setBatchProgress(false),
           onApplied: async () => { await load(); await refreshState() },
           show,
         }) : null,
