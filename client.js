@@ -1889,6 +1889,30 @@ window.__ModuleLoader__.load({
       /* ===== 今日页：今天吃什么 / 今日运势（feature-c） ===== */
       .wb-lucky-actions{display:flex;gap:8px;margin-left:auto;align-self:center;flex:0 0 auto;flex-wrap:wrap}
       @media(max-width:1100px){.wb-lucky-actions{flex-basis:100%;justify-content:flex-end;margin-left:0}}
+      .wb-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;align-items:stretch}
+      .wb-metric{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid var(--wb-border);border-radius:9px}
+      .wb-metric b{font-size:16px;font-variant-numeric:tabular-nums}
+      .wb-metric span{font-size:11px;color:var(--wb-text-3)}
+      .wb-drift{padding:16px 18px}
+      .wb-drift-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+      .wb-drift-empty{padding:18px;border:1px dashed var(--wb-border);border-radius:12px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+      .wb-drift-section{margin:16px 0;padding-top:12px;border-top:1px solid var(--wb-border)}
+      .wb-drift-title{font-size:12px;font-weight:650;color:var(--wb-text-2);margin-bottom:6px}
+      .wb-drift-goal{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;flex-wrap:wrap}
+      .wb-drift-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+      .wb-drift-dot.green{background:#22C55E}
+      .wb-drift-dot.yellow{background:#F59E0B}
+      .wb-drift-dot.red{background:#EF4444}
+      .wb-drift-goal-title{font-weight:600}
+      .wb-drift-streak{font-size:10px;color:#EF4444;background:rgba(239,68,68,.10);border-radius:999px;padding:1px 7px}
+      .wb-drift-advice{padding:8px 10px;border:1px solid var(--wb-border);border-radius:9px;margin-bottom:6px;background:rgba(127,127,127,.02)}
+      .wb-drift-identity{display:flex;align-items:center;gap:8px;padding:5px 0}
+      .wb-boss-title{font-size:15px;font-weight:650;margin-bottom:6px}
+      .wb-boss-hp{font-size:12px;color:var(--wb-text-2);margin-bottom:4px}
+      .wb-boss-bar{height:10px;border-radius:999px;background:rgba(127,127,127,.16);overflow:hidden;margin-bottom:8px}
+      .wb-boss-bar>i{display:block;height:100%;background:linear-gradient(90deg,#EF4444,#F59E0B);border-radius:999px}
+      .wb-boss-stats{font-size:12px;color:var(--wb-text-2);line-height:1.7}
+      .wb-boss-others{margin-top:10px;padding-top:8px;border-top:1px solid var(--wb-border)}
       .wb-northstar{padding:16px 18px}
       .wb-ns-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
       .wb-ns-main{position:relative;border-radius:12px;overflow:hidden}
@@ -3984,8 +4008,14 @@ window.__ModuleLoader__.load({
       const dateText = formatDateInZone(now, timezone || currentTz())
       const [mealOpen, setMealOpen] = useState(false)
       const [fortuneOpen, setFortuneOpen] = useState(false)
+      const [bossOpen, setBossOpen] = useState(false)
       const mealBtnRef = useRef(null)
       const fortuneBtnRef = useRef(null)
+      const bossBtnRef = useRef(null)
+      const closeBoss = () => {
+        setBossOpen(false)
+        requestAnimationFrame(() => bossBtnRef.current?.focus())
+      }
       const closeMeal = () => {
         setMealOpen(false)
         requestAnimationFrame(() => mealBtnRef.current?.focus())
@@ -4007,12 +4037,19 @@ window.__ModuleLoader__.load({
           ) : null,
           h('div', { className: 'wb-lucky-actions' },
             h('button', {
+              ref: bossBtnRef, className: 'wb-btn sm', onClick: () => setBossOpen(true),
+            }, '⚔️ 今日 Boss'),
+            h('button', {
               ref: mealBtnRef, className: 'wb-btn sm', onClick: () => setMealOpen(true),
             }, '🍚 今天吃什么'),
             h('button', {
               ref: fortuneBtnRef, className: 'wb-btn sm', onClick: () => setFortuneOpen(true),
             }, '🎋 今日运势')),
         ),
+        bossOpen ? h(V2BossModal, {
+          show, onClose: closeBoss,
+          onGoLevers: () => document.querySelector('.wb-lever-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+        }) : null,
         mealOpen ? h(LuckyMealModal, { show, onClose: closeMeal }) : null,
         fortuneOpen ? h(LuckyFortuneModal, { show, onClose: closeFortune }) : null,
       )
@@ -4494,6 +4531,229 @@ window.__ModuleLoader__.load({
           autoGenerate: Boolean(reportEditor.autoGenerate),
         }) : null,
       )
+    }
+
+    // 周键工具（与服务端 lib/drift.js 同算法，按日期键计算）
+    function isoWeekKeyOf(key) {
+      const [year, month, day] = String(key).split('-').map(Number)
+      const date = new Date(year, month - 1, day)
+      const weekday = (date.getDay() + 6) % 7
+      date.setDate(date.getDate() - weekday + 3)
+      const firstThursday = new Date(date.getFullYear(), 0, 4)
+      const firstDay = (firstThursday.getDay() + 6) % 7
+      firstThursday.setDate(firstThursday.getDate() - firstDay + 3)
+      const week = 1 + Math.round((date - firstThursday) / (7 * 86_400_000))
+      return `${date.getFullYear()}-W${String(week).padStart(2, '0')}`
+    }
+    function weekStartKey(week) {
+      const [year, weekNo] = String(week).split('-W').map(Number)
+      const jan4 = new Date(year, 0, 4)
+      return keyOf(new Date(year, 0, 4 - ((jan4.getDay() + 6) % 7) + (weekNo - 1) * 7))
+    }
+    function shiftWeekKey(week, delta) {
+      const monday = dateOfKey(weekStartKey(week))
+      return isoWeekKeyOf(keyOf(new Date(monday.getTime() + delta * 7 * 86_400_000)))
+    }
+
+    /** 2.0 · 复盘 / 偏航报告（人生面） */
+    function DriftTab({ state, show, ai }) {
+      const [week, setWeek] = useState(() => isoWeekKeyOf(todayKey()))
+      const [data, setData] = useState(null)
+      const [northStar, setNorthStar] = useState(null)
+      const [loading, setLoading] = useState(true)
+      const [busy, setBusy] = useState('')
+      const [error, setError] = useState('')
+      const [note, setNote] = useState('')
+      const [picks, setPicks] = useState({})
+      const [extendFor, setExtendFor] = useState(null)
+      const [editingGoal, setEditingGoal] = useState(null)
+      const [goals, setGoals] = useState([])
+      const load = useCallback(async (target = week) => {
+        setLoading(true)
+        try {
+          const [drift, ns] = await Promise.all([
+            request(`/drift?week=${encodeURIComponent(target)}`),
+            request('/northstar').catch(() => null),
+          ])
+          setData(drift)
+          setNorthStar(ns)
+          setNote(drift.note ?? '')
+          const nextPicks = {}
+          for (const pick of drift.identityPicks ?? []) nextPicks[pick.ref] = pick.identityId
+          setPicks(nextPicks)
+          setError('')
+        } catch (err) { setError(err.message) } finally { setLoading(false) }
+      }, [week])
+      useEffect(() => { void load(week) }, [week, load])
+      useEffect(() => {
+        request('/goals').then((result) => setGoals(result.goals ?? [])).catch(() => {})
+      }, [])
+      const run = async (label, fn, message) => {
+        setBusy(label)
+        try { await fn(); await load(week); if (message) show(message) } catch (err) { show(err.message, 'error') } finally { setBusy('') }
+      }
+      const rebuild = () => run('build', async () => { await request('/drift/build', { week }) }, '统计已更新')
+      const regenerate = () => run('advice', async () => { await request('/drift/advice', { week }) }, '建议已重新生成')
+      const decide = (item, action, payload) => run(`decide:${item.id}`, async () => {
+        const result = await request('/drift/decide', { week, id: item.id, action, payload })
+        if (result.clientAction?.type === 'shrink') {
+          setEditingGoal({ goal: result.clientAction.goal, measure: result.clientAction.newMeasure })
+        }
+      }, action === 'dismiss' ? '已忽略' : '已采纳')
+      const saveReport = () => run('save', async () => { await request('/drift/save', { week, note }) }, '偏航报告已保存')
+      const saveIdentity = () => run('identity', async () => {
+        const chosen = (data?.completedTodos ?? []).map((todo) => {
+          const identityId = picks[`todo:${todo.todoId}`]
+          if (!identityId) return null
+          return { ref: `todo:${todo.todoId}`, identityId, text: todo.content, date: todo.date }
+        }).filter(Boolean)
+        if (!chosen.length) { show('先给成果选一个身份宣言', 'error'); return }
+        await request('/drift/identity', { week, picks: chosen })
+      }, '身份证据已保存')
+
+      if (loading) return h('div', { className: 'wb-card' }, h(Skeleton, { rows: 5 }))
+      if (error) return h(EmptyState, { title: '偏航报告没加载出来', text: error, action: h('button', { className: 'wb-btn primary sm', onClick: () => void load(week) }, '重试') })
+      const built = data?.built === true || Boolean(data?.builtAt)
+      const goalsRows = data?.goals ?? []
+      const identities = (northStar?.identity ?? [])
+      const advice = data?.advice ?? []
+      const levers = data?.levers ?? {}
+
+      return h('div', null,
+        h('div', { className: 'wb-card wb-drift' },
+          h('div', { className: 'wb-drift-head' },
+            h('div', { className: 'wb-card-title' }, '复盘 · 偏航报告'),
+            h('span', { className: 'wb-badge' }, `${week}${data?.range ? ` · ${data.range.from.slice(5)} ~ ${data.range.to.slice(5)}` : ''}`),
+            h('div', { className: 'wb-spacer' }),
+            h('button', { className: 'wb-btn ghost sm', onClick: () => setWeek(shiftWeekKey(week, -1)) }, '◀ 上周'),
+            h('button', { className: 'wb-btn ghost sm', onClick: () => setWeek(isoWeekKeyOf(todayKey())) }, '本周'),
+            h('button', { className: 'wb-btn ghost sm', onClick: () => setWeek(shiftWeekKey(week, 1)) }, '下周 ▶'),
+            h('button', { className: 'wb-btn sm', disabled: Boolean(busy), onClick: rebuild }, busy === 'build' ? '统计中…' : '重新统计')),
+          !built
+            ? h('div', { className: 'wb-drift-empty' },
+              h('b', null, '这一周还没有生成偏航报告'),
+              h('div', { className: 'wb-small' }, '每周日 20:00 自动生成；也可以现在统计一次。'),
+              h('button', { className: 'wb-btn primary sm', disabled: Boolean(busy), onClick: rebuild }, '现在统计'))
+            : h(React.Fragment, null,
+              h('div', { className: 'wb-drift-section' },
+                h('div', { className: 'wb-drift-title' }, '一、目标证据'),
+                goalsRows.length
+                  ? goalsRows.map((goal) => h('div', { key: goal.goalId, className: 'wb-drift-goal' },
+                    h('span', { className: `wb-drift-dot ${goal.signal}` }),
+                    h('span', { className: 'wb-drift-goal-title' }, goal.title),
+                    h('span', { className: 'wb-small wb-muted' }, `${goal.cycle} · 证据 ${goal.evidence} · 进度 ${goal.progress}%`),
+                    goal.signal === 'red' && goal.redStreak > 1 ? h('span', { className: 'wb-drift-streak' }, `连续 ${goal.redStreak} 周 0 证据`) : null))
+                  : h('div', { className: 'wb-hint' }, '这一周没有需要统计的目标。')),
+              h('div', { className: 'wb-drift-section' },
+                h('div', { className: 'wb-drift-title' }, '二、杠杆'),
+                h('div', { className: 'wb-small wb-muted' }, `设了 ${levers.daysSet ?? 0}/${levers.workdays ?? 0} 个工作日 · 完成 ${levers.done ?? 0}/${levers.total ?? 0}${levers.mostPostponed?.times ? ` · 顺延最多 ×${levers.mostPostponed.times}` : ''}`)),
+              h('div', { className: 'wb-drift-section' },
+                h('div', { className: 'wb-drift-title' }, '三、修正建议'),
+                h('div', { className: 'wb-row', style: { marginBottom: 6 } },
+                  h('span', { className: 'wb-hint' }, 'AI 起草，你来定；只有采纳才会改数据'),
+                  h('div', { className: 'wb-spacer' }),
+                  h('button', { className: 'wb-btn sm', disabled: Boolean(busy), onClick: regenerate }, busy === 'advice' ? '生成中…' : '重新生成')),
+                advice.length
+                  ? advice.map((item) => h('div', { key: item.id, className: 'wb-drift-advice' },
+                    h('div', { className: 'wb-small', style: { fontWeight: 600 } }, item.text),
+                    h('div', { className: 'wb-hint' }, `依据：${item.basis || '—'}`),
+                    item.status === 'pending'
+                      ? h('div', { className: 'wb-row', style: { marginTop: 4 } },
+                        h('button', {
+                          className: 'wb-btn sm primary', disabled: Boolean(busy),
+                          onClick: () => {
+                            if (item.type === 'extend') setExtendFor(item)
+                            else decide(item, 'accept')
+                          },
+                        }, '采纳'),
+                        h('button', { className: 'wb-btn sm ghost', disabled: Boolean(busy), onClick: () => decide(item, 'dismiss') }, '忽略'))
+                      : h('span', { className: 'wb-small wb-muted' }, item.status === 'accepted' ? '已采纳' : '已忽略')))
+                  : h('div', { className: 'wb-hint' }, '本周还没有建议。')),
+              h('div', { className: 'wb-drift-section' },
+                h('div', { className: 'wb-drift-title' }, '四、身份证据（只有你能勾）'),
+                identities.length && (data?.completedTodos ?? []).length
+                  ? h(React.Fragment, null,
+                    h('div', { className: 'wb-hint' }, '把本周完成的成果勾到对应的身份宣言下。'),
+                    (data.completedTodos ?? []).map((todo) => h('div', { key: todo.todoId, className: 'wb-drift-identity' },
+                      h('span', { className: 'wb-small', style: { flex: 1, minWidth: 0 } }, `${todo.date} ${todo.content}`),
+                      h('select', {
+                        className: 'wb-select', style: { width: 210 }, value: picks[`todo:${todo.todoId}`] ?? '',
+                        onChange: (event) => setPicks({ ...picks, [`todo:${todo.todoId}`]: event.target.value }),
+                      },
+                        h('option', { value: '' }, '不勾'),
+                        identities.map((identity) => h('option', { key: identity.id, value: identity.id }, identity.text))))),
+                    h('button', { className: 'wb-btn sm', disabled: Boolean(busy), onClick: saveIdentity }, '保存身份证据'))
+                  : h('div', { className: 'wb-hint' }, identities.length ? '本周没有完成的待办。' : '写了北极星后，这里可以把成果勾到你想成为的人下面。')),
+              h('div', { className: 'wb-drift-section' },
+                h('div', { className: 'wb-drift-title' }, '五、我的一句话（可选）'),
+                h('textarea', { className: 'wb-textarea', rows: 3, value: note, placeholder: '这周想对以后的自己说一句……', onChange: (event) => setNote(event.target.value) }),
+                h('div', { className: 'wb-row', style: { marginTop: 6 } },
+                  h('button', { className: 'wb-btn primary sm', disabled: Boolean(busy), onClick: saveReport }, busy === 'save' ? '保存中…' : '保存本周报告'),
+                  data?.savedAt ? h('span', { className: 'wb-hint' }, `上次保存 ${String(data.savedAt).slice(0, 16).replace('T', ' ')}`) : null)))),
+        extendFor ? h(V2DriftExtendModal, {
+          item: extendFor, onClose: () => setExtendFor(null), show,
+          onConfirm: async (date) => { setExtendFor(null); await decide(extendFor, 'accept', { newEndDate: date }) },
+        }) : null,
+        editingGoal ? h(GoalFormModal, {
+          goal: { ...editingGoal.goal, measure: editingGoal.measure || editingGoal.goal.measure }, goals,
+          onClose: () => setEditingGoal(null),
+          onSaved: async () => { setEditingGoal(null) },
+          show,
+        }) : null)
+    }
+
+    function V2DriftExtendModal({ item, onClose, onConfirm, show }) {
+      const [date, setDate] = useState(item.newEndDate || '')
+      return h(Modal, {
+        title: '把截止日期改到？', size: 'sm', onClose,
+        footer: [
+          h('button', { key: 'cancel', className: 'wb-btn', onClick: onClose }, '取消'),
+          h('button', {
+            key: 'ok', className: 'wb-btn primary',
+            onClick: () => { if (!date) { show('先选一个日期', 'error'); return } void onConfirm(date) },
+          }, '确认延期'),
+        ],
+      },
+      h('div', { className: 'wb-hint', style: { marginBottom: 8 } }, `目标「${item.text}」；原建议 ${item.newEndDate || '（未给出）'}`),
+      h(DateField, { value: date, onChange: setDate }))
+    }
+
+    /** 2.0 · 今日 Boss（今日页小趣味按钮） */
+    function V2BossModal({ onClose, show, onGoLevers }) {
+      const [data, setData] = useState(null)
+      const [loading, setLoading] = useState(true)
+      useEffect(() => {
+        let alive = true
+        request('/boss/today').then((result) => { if (alive) setData(result) }).catch((error) => show(error.message, 'error')).finally(() => { if (alive) setLoading(false) })
+        return () => { alive = false }
+      }, [show])
+      const boss = data?.boss
+      return h(Modal, {
+        title: `⚔️ 今日 Boss${stateDateLabel()}`, size: 'md', onClose,
+        footer: [
+          boss ? h('button', { key: 'levers', className: 'wb-btn', onClick: () => { onClose(); onGoLevers?.() } }, '去选今天的杠杆') : null,
+          h('button', { key: 'close', className: 'wb-btn primary', onClick: onClose }, '关闭'),
+        ],
+      },
+      loading
+        ? h('div', { className: 'wb-ai-panel' }, h('div', { className: 'wb-ai-steps' }, h('span', { className: 'wb-ai-step on' }, h(Spinner), '正在算本周伤害…')))
+        : boss
+          ? h('div', { className: 'wb-boss' },
+            h('div', { className: 'wb-boss-title' }, `${boss.title}（${boss.cycle}目标）`),
+            h('div', { className: 'wb-boss-hp' }, `血量 ${boss.blood} / 100`),
+            h('div', { className: 'wb-boss-bar' }, h('i', { style: { width: `${Math.max(0, Math.min(100, boss.blood))}%` } })),
+            h('div', { className: 'wb-boss-stats' },
+              `本周伤害 ${boss.evidence} 次 · ${boss.redStreak > 1 ? `已连续 ${boss.redStreak} 周没打` : '本周还没打'} · 距截止 ${boss.daysLeft} 天`),
+            boss.lastHit ? h('div', { className: 'wb-hint' }, `最近一次伤害：${boss.lastHit.date}「${boss.lastHit.text}」`) : null,
+            (data.others ?? []).length ? h('div', { className: 'wb-boss-others' },
+              h('div', { className: 'wb-hint' }, '其他 Boss：'),
+              data.others.map((item) => h('div', { key: item.goalId, className: 'wb-small wb-muted' }, `${item.title} ${item.blood}`))) : null)
+          : h('div', { className: 'wb-empty-state' },
+            h('b', null, '这个月还没有 Boss'),
+            h('div', { className: 'wb-small' }, '去目标页设一个月目标吧。')))
+    }
+    function stateDateLabel() {
+      try { return ` · ${todayKey().slice(5).replace('-', '-')}` } catch { return '' }
     }
 
     /** 2.0 · 北极星页（人生面） */
@@ -8121,6 +8381,7 @@ window.__ModuleLoader__.load({
       const [form, setForm] = useState(null)
       const [dirty, setDirty] = useState(false)
       const [sharePreview, setSharePreview] = useState(null)
+      const [metrics, setMetrics] = useState(null)
       const [nowTick, setNowTick] = useState(() => new Date())
       useEffect(() => {
         const timer = setInterval(() => setNowTick(new Date()), 1000)
@@ -8145,6 +8406,11 @@ window.__ModuleLoader__.load({
         }).catch(() => { if (alive) setSharePreview('（读取失败）') })
         return () => { alive = false }
       }, [form?.northStar?.shareWithAI])
+      useEffect(() => {
+        let alive = true
+        request('/metrics?weeks=4').then((data) => { if (alive) setMetrics(data) }).catch(() => {})
+        return () => { alive = false }
+      }, [])
       if (!form) return null
       const off = aiOffOf(ai)
       const set = (key, value) => { setForm({ ...form, [key]: value }); setDirty(true) }
@@ -8244,6 +8510,33 @@ window.__ModuleLoader__.load({
             srow('早安只推杠杆', '关闭后早安通知还会列出当天待办', h(Switch, {
               checked: form.leverMorningOnly !== false, label: '早安只推杠杆', onChange: (value) => set('leverMorningOnly', value),
             }))),
+          section('偏航报告', '每周日 20:00（按设置的城市时区）自动生成，节假日照常；统计本地完成，建议由 AI 自动起草。',
+            srow('停滞提醒方式', 'weekly：停滞只在偏航报告里体现；daily：保留每日停提醒',
+              h('select', {
+                className: 'wb-select', style: { maxWidth: 210 }, value: form.goalAlertMode ?? 'daily',
+                onChange: (event) => set('goalAlertMode', event.target.value),
+              },
+                h('option', { value: 'daily' }, '每日提醒（保持现状）'),
+                h('option', { value: 'weekly' }, '只在每周偏航报告里提醒')))),
+          section('我的使用统计', '只有数字，没有内容；保存在本机，超过 180 天自动清理。',
+            metrics
+              ? h('div', { className: 'wb-metrics' },
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.activeDays), h('span', null, '活跃天数')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.report ?? 0), h('span', null, '日报')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.leverSet ?? 0), h('span', null, '设定杠杆')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.leverItems ?? 0), h('span', null, '杠杆条目')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.northstarSave ?? 0), h('span', null, '保存北极星')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.driftBuild ?? 0), h('span', null, '生成偏航')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.driftOpen ?? 0), h('span', null, '打开偏航')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.adviceAcceptRate == null ? '—' : `${metrics.adviceAcceptRate}%`), h('span', null, '建议采纳率')),
+                h('button', {
+                  className: 'wb-btn sm ghost', style: { alignSelf: 'center' },
+                  onClick: () => {
+                    const text = `知行最近 ${metrics.weeks} 周：活跃 ${metrics.activeDays} 天；日报 ${metrics.totals?.report ?? 0} 份；杠杆设定 ${metrics.totals?.leverSet ?? 0} 次、${metrics.totals?.leverItems ?? 0} 条；保存北极星 ${metrics.totals?.northstarSave ?? 0} 次；生成偏航 ${metrics.totals?.driftBuild ?? 0} 次、打开 ${metrics.totals?.driftOpen ?? 0} 次；建议采纳率 ${metrics.adviceAcceptRate == null ? '—' : `${metrics.adviceAcceptRate}%`}。`
+                    navigator.clipboard?.writeText(text).then(() => show('已复制使用统计')).catch(() => show('复制失败，可截图分享', 'error'))
+                  },
+                }, '复制为文本'))
+              : h('div', { className: 'wb-hint' }, '统计加载中…')),
           section('隐私', '人生面内容只在本机；工作汇报永远不包含北极星、杠杆和偏航报告。',
             srow('允许 AI 读取一句话愿景和规则', '用于杠杆推荐、偏航建议、目标拆解；反愿景和身份宣言永不发送',
               h(Switch, {
@@ -8492,10 +8785,10 @@ window.__ModuleLoader__.load({
         h('div', { className: 'wb-head' },
           h('div', { className: 'wb-title' }, '知行'),
           h('div', { className: 'wb-tabs' },
-            ['today', 'reports', 'goals', 'northstar', 'settings'].map((key) => h('button', {
+            ['today', 'reports', 'goals', 'drift', 'northstar', 'settings'].map((key) => h('button', {
               key, className: `wb-tab${tab === key ? ' active' : ''}`,
               onClick: () => setTab(key),
-            }, { today: '今日', reports: '日报', goals: '目标', northstar: '北极星 🔒', settings: '设置' }[key])),
+            }, { today: '今日', reports: '日报', goals: '目标', drift: '复盘', northstar: '北极星 🔒', settings: '设置' }[key])),
           ),
           h('div', { className: 'wb-spacer' }),
           state ? h(ModelPicker, { state, refresh, show }) : null,
@@ -8540,6 +8833,7 @@ window.__ModuleLoader__.load({
               onApplySuggestion: applySuggestion, onDismissSuggestion: dismissSuggestion,
               onOpenNorthStar: () => setTab('northstar'),
             })
+            : tab === 'drift' ? h(DriftTab, { state, show, ai: state.ai })
             : tab === 'northstar' ? h(NorthStarTab, { state, show, onOpenSettings: () => setTab('settings') })
             : h(SettingsTab, { state, refresh, show, ai: state.ai }),
         ),
