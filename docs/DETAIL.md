@@ -84,7 +84,7 @@
   顶部输入框支持模糊搜索（包含匹配或字母顺序子序列）；选中后插件只用自己的这条选择，
   选「跟随 Harness」则实时读当前会话模型，其次默认模型。
 - `log.md` 记录每次调用实际使用的 `provider/model/reasoningEffort` 与来源。
-- 不带 Key、不改宿主配置；不限调用次数（设置里已去掉 AI 开关）；失败重试 1 次。
+- 不带 Key、不改宿主配置；不限调用次数（设置里已去掉 AI 开关）；失败重试 2 次。
 
 ## 主题
 
@@ -106,8 +106,8 @@ $DSH_HOME/data/知行/
 ├── 汇总/YYYY-Www.md         # 周报 / 月报
 ├── log.md                   # 时间 | 动作 | 结果
 ├── 待办与目标总览.md        # 每次改 json 后重写的只读镜像
-├── settings.json            # 提醒时间、节假日、AI 开关、模型选择、主题
-├── 状态.json                # 提醒去重、AI 计数、页面心跳
+├── settings.json            # 提醒时间、节假日、模型选择、主题
+├── state.json               # 提醒去重、AI 计数、页面心跳
 └── .internal/               # 采集缓存与待确认建议（可删）
 ```
 
@@ -127,6 +127,8 @@ POST /api/zhixing/debug/seed/clear    清理性能测试数据
 POST /api/zhixing/debug/model         切换会话 / 插件 / 默认模型
 GET  /api/zhixing/debug/state         提醒去重、AI 次数、心跳、通知渠道
 ```
+
+这些接口默认不注册，需要给 DSH 进程设置环境变量 `ZHIXING_DEBUG=1` 后才可用；关闭时统一返回 404，设置页的「调试」卡片也会隐藏。
 
 测试记录会以 `[测试]` 写进 `log.md`。
 

@@ -1,6 +1,6 @@
 {
   "name": "dsh-zhixing",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "description": "知行：把 DeepSeek Harness 里的一天整理成日报，把明天的计划变成明天的待办，并管理周月年目标。A local-first workday workspace for DeepSeek Harness.",
   "main": "./index.js",
@@ -60,7 +60,8 @@
     "goals"
   ],
   "scripts": {
-    "check": "node scripts/check-components.mjs && node --check index.js && node --check client.js"
+    "check": "node scripts/check-components.mjs && node --check index.js && node --check client.js",
+    "test": "node --test"
   },
   "publishConfig": {
     "access": "public"

@@ -6,6 +6,8 @@ window.__ModuleLoader__.load({
     const { useCallback, useEffect, useMemo, useRef, useState } = React
 
     const API = '/api/zhixing'
+    // 后端只有在 ZHIXING_DEBUG=1 时才注册 /debug/*；前端按同一个开关隐藏入口。
+    let DEBUG_ENABLED = false
     const PANEL_ID = 'zhixing'
     const CYCLES = ['年', '季度', '月', '周']
     const CYCLE_RANK = { 周: 1, 月: 2, 季度: 3, 年: 4 }
@@ -1965,6 +1967,7 @@ window.__ModuleLoader__.load({
     `
 
     function reportClientError(error, info) {
+      if (!DEBUG_ENABLED) return
       try {
         const payload = {
           message: String(error?.message ?? error ?? 'unknown'),
@@ -4478,6 +4481,8 @@ window.__ModuleLoader__.load({
     function printHtml(html) {
       const iframe = document.createElement('iframe')
       iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'
+      // 同源但禁止脚本：模板 HTML 里即使有 <script> 也不会在导出流程里执行。
+      iframe.setAttribute('sandbox', 'allow-same-origin')
       document.body.appendChild(iframe)
       iframe.onload = () => {
         try {
@@ -4492,6 +4497,8 @@ window.__ModuleLoader__.load({
     async function exportPng(html, name) {
       const iframe = document.createElement('iframe')
       iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:900px;height:1200px;border:0'
+      // 只保留同源（截图要读 DOM），不给 allow-scripts。
+      iframe.setAttribute('sandbox', 'allow-same-origin')
       document.body.appendChild(iframe)
       await new Promise((resolve) => {
         iframe.onload = resolve
@@ -4605,7 +4612,7 @@ window.__ModuleLoader__.load({
           ),
           off ? h(AiOffHint, { ai, manualText: '仍可直接编辑 HTML 或上传模板。' }) : null,
           aiModified ? h('div', { className: 'wb-ai-note' }, h(AiTag, { model: ai?.model }), '模板已由 AI 修改，右侧预览确认后再保存') : null,
-          preview ? h('iframe', { className: 'wb-iframe', srcDoc: html, title: '模板预览' }) : null,
+          preview ? h('iframe', { className: 'wb-iframe', sandbox: '', srcDoc: html, title: '模板预览' }) : null,
         ))
     }
 
@@ -6410,7 +6417,7 @@ window.__ModuleLoader__.load({
                       goalSuggestionButton),
                     goalSuggestionPanel,
                     mode === 'html'
-                      ? h('iframe', { className: 'wb-iframe wb-iframe-fill', srcDoc: html, title: '日报 HTML 预览' })
+                      ? h('iframe', { className: 'wb-iframe wb-iframe-fill', sandbox: '', srcDoc: html, title: '日报 HTML 预览' })
                       : content ? renderMarkdown(content) : h('div', { className: 'wb-empty' }, '这一天没有内容。')),
           ),
         ),
@@ -7514,14 +7521,14 @@ window.__ModuleLoader__.load({
               h('label', { className: 'wb-form-field' }, '调休上班',
                 h('textarea', { className: 'wb-textarea', rows: 4, value: form.extraText, placeholder: '2026-10-11', onChange: (event) => set('extraText', event.target.value) })))),
           h(QuotesSettings, { key: 'quotes', show, ai }),
-          h('div', { className: 'wb-card', key: 'debug' },
+          state.debug === true ? h('div', { className: 'wb-card', key: 'debug' },
             h('details', { className: 'wb-adv' },
               h('summary', null, '调试'),
               h('div', { className: 'wb-hint', style: { marginBottom: 6 } }, '不改系统时间，结果记录到 log.md 并标 [测试]。'),
               srow('模拟 9:00 提醒', '马上触发一次早安提醒，看看效果', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/morning', { channel: 'auto' }); await refresh(); show(`早安提醒：${r.channel}，${r.count ?? 0} 项`) } catch (e) { show(e.message, 'error') } } }, '执行')),
               srow('模拟 18:00 提醒', '马上触发一次晚报提醒', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/evening', { channel: 'auto' }); await refresh(); show(r.skipped ? `晚报：${r.skipped}` : `晚报提醒：${r.channel}`) } catch (e) { show(e.message, 'error') } } }, '执行')),
               srow('检查目标提醒', '检查有没有停滞或有风险的目标', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/goal-check', { force: true, channel: 'auto' }); await refresh(); show(`目标检查：${(r.alerts ?? []).length} 条提醒`) } catch (e) { show(e.message, 'error') } } }, '执行')),
-              srow('立即检查', '马上跑一遍所有提醒规则', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/tick', { force: true }); await refresh(); show(`tick：${JSON.stringify(r).slice(0, 120)}`) } catch (e) { show(e.message, 'error') } } }, '执行'))))),
+              srow('立即检查', '马上跑一遍所有提醒规则', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/tick', { force: true }); await refresh(); show(`tick：${JSON.stringify(r).slice(0, 120)}`) } catch (e) { show(e.message, 'error') } } }, '执行')))) : null),
         dirty && dirtyCount
           ? h('div', { className: 'wb-savebar', role: 'status' },
             h('span', null, `有 ${dirtyCount} 项修改未保存`),
@@ -7607,6 +7614,7 @@ window.__ModuleLoader__.load({
         try {
           const data = await request('/state')
           setActiveTz(data.timezone || tzForRegion(data.settings?.region || data.settings?.weatherCity))
+          DEBUG_ENABLED = data.debug === true
           setState(data)
           stateRef.current = data
           setError('')

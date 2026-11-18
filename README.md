@@ -49,7 +49,7 @@ The AI is **optional**. Without a configured model you can still write reports m
 - Pick a week or a month; AI reads that period's daily reports and writes the weekly / monthly summary.
 - Choose the audience (**自己 / 团队 / 上级**) and generate one or more versions in a single run. Each version stays editable.
 - The generated report inherits the goal tags from the period, so the weekly review and the goal tree stay connected.
-- Edit inline, save as `2026-W46` / `2026-11` in the same `日报/` folder, then copy, export to PDF / PNG / HTML, or reuse it in the next report.
+- Edit inline, save as `2026-W46` / `2026-11` under `汇总/`, then copy, export to PDF / PNG / HTML, or reuse it in the next report.
 - This is the “weekly review” part of the loop: daily work in, a shareable summary out.
 
 ## AI goals
@@ -117,7 +117,7 @@ All screenshots above are captured from the plugin's UI with demo data.
 
 - **AI is unavailable:** the banner says “AI 暂时不可用” when no model is configured or the model is unreachable. You can still write reports manually, manage todos / goals, and use the lucky features.
 - **No 知行 entry:** check DSH Desktop 0.2.x, the plugin is enabled under Plugins, and DSH was restarted after installation.
-- **Where is my data?** `~/.dsh/data/知行/`: `日报/YYYY-MM-DD.md`, weekly / monthly files in the same `日报/` folder (`2026-W46.md`, `2026-11.md`), `待办.json`, `目标.json`, `settings.json`, `导入/` and `log.md`.
+- **Where is my data?** `~/.dsh/data/知行/`: `日报/YYYY-MM-DD.md`, weekly / monthly files in `汇总/` (`2026-W46.md`, `2026-11.md`), `待办.json`, `目标.json`, `settings.json`, `state.json`, `导入/` and `log.md`.
 - **A generated report looks off:** edit it before saving; the AI draft is a draft, not an automatic commit.
 - **Goal progress did not change:** progress changes only after you accept a suggestion (or edit it manually); child goals then recompute automatically.
 - **Updating:** replace the plugin or pull the repository and restart DSH. The data lives outside the plugin folder, so it is kept.
