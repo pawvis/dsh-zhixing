@@ -1679,6 +1679,20 @@ window.__ModuleLoader__.load({
       .wb-tl-today-label{position:absolute;top:-2px;transform:translateX(-50%);color:#ef4444;background:var(--wb-card);padding:0 3px;border-radius:3px;white-space:nowrap}
 
       .wb-settings{display:flex;flex-direction:column;gap:14px;padding-bottom:4px}
+      .wb-settings-shell{display:grid;grid-template-columns:190px minmax(0,1fr);gap:16px;align-items:start}
+      .wb-settings-nav{display:flex;flex-direction:column;gap:3px;position:sticky;top:8px;padding:6px;border:1px solid var(--wb-border);border-radius:12px;background:var(--wb-card)}
+      .wb-settings-nav-item{display:flex;flex-direction:column;gap:1px;padding:8px 10px;border:0;border-radius:8px;background:transparent;text-align:left;cursor:pointer;color:var(--wb-text-2);transition:background .12s ease,color .12s ease}
+      .wb-settings-nav-item:hover{background:rgba(127,127,127,.06)}
+      .wb-settings-nav-item.on{background:rgba(59,130,246,.10);color:var(--wb-accent)}
+      .wb-settings-nav-label{font-size:12px;font-weight:650}
+      .wb-settings-nav-hint{font-size:10px;color:var(--wb-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .wb-settings-nav-item.on .wb-settings-nav-hint{color:var(--wb-accent);opacity:.8}
+      @media(max-width:820px){
+        .wb-settings-shell{grid-template-columns:minmax(0,1fr);gap:10px}
+        .wb-settings-nav{position:static;flex-direction:row;overflow-x:auto;gap:4px;padding:5px}
+        .wb-settings-nav-item{flex:0 0 auto;padding:6px 10px}
+        .wb-settings-nav-hint{display:none}
+      }
       .wb-settings-body{display:flex;flex-direction:column;margin-top:2px}
       .wb-settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
       @media (max-width:900px){.wb-settings-grid{grid-template-columns:minmax(0,1fr)}}
@@ -8380,6 +8394,7 @@ window.__ModuleLoader__.load({
     function SettingsTab({ state, refresh, show, ai }) {
       const [form, setForm] = useState(null)
       const [dirty, setDirty] = useState(false)
+      const [settingsGroup, setSettingsGroup] = useState('daily')
       const [sharePreview, setSharePreview] = useState(null)
       const [metrics, setMetrics] = useState(null)
       const [nowTick, setNowTick] = useState(() => new Date())
@@ -8489,9 +8504,8 @@ window.__ModuleLoader__.load({
           }, Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0')).map((value) => h('option', { key: value, value }, value))))
       }
       const theme = ['host', 'light', 'dark', 'time'].includes(form.themeMode) ? form.themeMode : 'host'
-      return h(React.Fragment, null,
-        h('div', { className: 'wb-settings' },
-          section('提醒', '到点会在 DSH 里弹出提醒，并生成当天的 AI 建议。',
+      const settingsGroups = [
+        { id: 'daily', label: '日常', hint: '提醒 · 地区 · 节假日', items: [section('提醒', '到点会在 DSH 里弹出提醒，并生成当天的 AI 建议。',
             srow('早安提醒', '提醒你看今天的待办', hm('morningTime', '早安提醒')),
             srow('晚报提醒', '提醒你写日报，AI 会提前整理好草稿', hm('eveningTime', '晚报提醒')),
             srow('跳过周末', '周六、周日不发提醒（调休上班日除外）',
@@ -8502,59 +8516,7 @@ window.__ModuleLoader__.load({
                   h('button', { className: 'wb-btn sm', onClick: () => set('goalStaleDays', Math.max(1, Number(form.goalStaleDays || 3) - 1)) }, '−'),
                   h('span', { style: { minWidth: 24, textAlign: 'center', fontVariantNumeric: 'tabular-nums' } }, String(Number(form.goalStaleDays || 3))),
                   h('button', { className: 'wb-btn sm', onClick: () => set('goalStaleDays', Math.min(30, Number(form.goalStaleDays || 3) + 1)) }, '＋')),
-                h('span', { className: 'wb-small wb-muted' }, '天（1–30）')))),
-          section('杠杆', '每天 2–4 个能推动目标的待办；AI 只给候选，确认后才写入。',
-            srow('完成动效', '完成杠杆时播放一个轻量动画', h(Switch, {
-              checked: form.leverAnimation !== false, label: '完成动效', onChange: (value) => set('leverAnimation', value),
-            })),
-            srow('早安只推杠杆', '关闭后早安通知还会列出当天待办', h(Switch, {
-              checked: form.leverMorningOnly !== false, label: '早安只推杠杆', onChange: (value) => set('leverMorningOnly', value),
-            }))),
-          section('偏航报告', '每周日 20:00（按设置的城市时区）自动生成，节假日照常；统计本地完成，建议由 AI 自动起草。',
-            srow('停滞提醒方式', 'weekly：停滞只在偏航报告里体现；daily：保留每日停提醒',
-              h('select', {
-                className: 'wb-select', style: { maxWidth: 210 }, value: form.goalAlertMode ?? 'daily',
-                onChange: (event) => set('goalAlertMode', event.target.value),
-              },
-                h('option', { value: 'daily' }, '每日提醒（保持现状）'),
-                h('option', { value: 'weekly' }, '只在每周偏航报告里提醒')))),
-          section('我的使用统计', '只有数字，没有内容；保存在本机，超过 180 天自动清理。',
-            metrics
-              ? h('div', { className: 'wb-metrics' },
-                h('div', { className: 'wb-metric' }, h('b', null, metrics.activeDays), h('span', null, '活跃天数')),
-                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.report ?? 0), h('span', null, '日报')),
-                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.leverSet ?? 0), h('span', null, '设定杠杆')),
-                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.leverItems ?? 0), h('span', null, '杠杆条目')),
-                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.northstarSave ?? 0), h('span', null, '保存北极星')),
-                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.driftBuild ?? 0), h('span', null, '生成偏航')),
-                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.driftOpen ?? 0), h('span', null, '打开偏航')),
-                h('div', { className: 'wb-metric' }, h('b', null, metrics.adviceAcceptRate == null ? '—' : `${metrics.adviceAcceptRate}%`), h('span', null, '建议采纳率')),
-                h('button', {
-                  className: 'wb-btn sm ghost', style: { alignSelf: 'center' },
-                  onClick: () => {
-                    const text = `知行最近 ${metrics.weeks} 周：活跃 ${metrics.activeDays} 天；日报 ${metrics.totals?.report ?? 0} 份；杠杆设定 ${metrics.totals?.leverSet ?? 0} 次、${metrics.totals?.leverItems ?? 0} 条；保存北极星 ${metrics.totals?.northstarSave ?? 0} 次；生成偏航 ${metrics.totals?.driftBuild ?? 0} 次、打开 ${metrics.totals?.driftOpen ?? 0} 次；建议采纳率 ${metrics.adviceAcceptRate == null ? '—' : `${metrics.adviceAcceptRate}%`}。`
-                    navigator.clipboard?.writeText(text).then(() => show('已复制使用统计')).catch(() => show('复制失败，可截图分享', 'error'))
-                  },
-                }, '复制为文本'))
-              : h('div', { className: 'wb-hint' }, '统计加载中…')),
-          section('隐私', '人生面内容只在本机；工作汇报永远不包含北极星、杠杆和偏航报告。',
-            srow('允许 AI 读取一句话愿景和规则', '用于杠杆推荐、偏航建议、目标拆解；反愿景和身份宣言永不发送',
-              h(Switch, {
-                checked: northStar.shareWithAI === true, label: '允许 AI 读取一句话愿景和规则',
-                onChange: (value) => setNorthStar({ shareWithAI: value }),
-              })),
-            northStar.shareWithAI === true
-              ? h('div', { className: 'wb-privacy-preview' },
-                h('div', { className: 'wb-hint' }, '将发送给模型的确切内容（不含反愿景与身份宣言）：'),
-                h('pre', { className: 'wb-privacy-text' }, sharePreview ?? '读取中…'))
-              : null,
-            srow('北极星防窥遮挡', '打开北极星页和目标页时默认模糊显示，点击才显示',
-              h(Switch, {
-                checked: northStar.blur !== false, label: '北极星防窥遮挡',
-                onChange: (value) => setNorthStar({ blur: value }),
-              })),
-            h('div', { className: 'wb-privacy-note' }, '团队 / 上级周报永远不会包含北极星、杠杆、偏航报告，这一条没有开关。')),
-          section('地区与时间', '影响天气、时钟和时区。插件里的日期、时间、提醒和「今天吃什么」都按这里的城市时区计算。',
+                h('span', { className: 'wb-small wb-muted' }, '天（1–30）')))), section('地区与时间', '影响天气、时钟和时区。插件里的日期、时间、提醒和「今天吃什么」都按这里的城市时区计算。',
             (() => {
               const regionValue = form.region || form.weatherCity || ''
               const regionTz = tzForRegion(regionValue)
@@ -8580,8 +8542,27 @@ window.__ModuleLoader__.load({
             })(),
             srow('显示天气', '在今日页顶部显示', h(Switch, {
               checked: form.weatherEnabled !== false, label: '显示天气', onChange: (value) => set('weatherEnabled', value),
-            }))),
-          section('外观', '修改后立即生效，不需要保存。',
+            }))), section('节假日', '节假日不提醒；调休上班的周末照常提醒。每行一个日期，格式 YYYY-MM-DD。',
+            h('div', { className: 'wb-settings-grid' },
+              h('label', { className: 'wb-form-field' }, '节假日',
+                h('textarea', { className: 'wb-textarea', rows: 4, value: form.holidaysText, placeholder: '2026-10-01', onChange: (event) => set('holidaysText', event.target.value) })),
+              h('label', { className: 'wb-form-field' }, '调休上班',
+                h('textarea', { className: 'wb-textarea', rows: 4, value: form.extraText, placeholder: '2026-10-11', onChange: (event) => set('extraText', event.target.value) }))))] },
+        { id: 'growth', label: '成长', hint: '杠杆 · 偏航报告', items: [section('杠杆', '每天 2–4 个能推动目标的待办；AI 只给候选，确认后才写入。',
+            srow('完成动效', '完成杠杆时播放一个轻量动画', h(Switch, {
+              checked: form.leverAnimation !== false, label: '完成动效', onChange: (value) => set('leverAnimation', value),
+            })),
+            srow('早安只推杠杆', '关闭后早安通知还会列出当天待办', h(Switch, {
+              checked: form.leverMorningOnly !== false, label: '早安只推杠杆', onChange: (value) => set('leverMorningOnly', value),
+            }))), section('偏航报告', '每周日 20:00（按设置的城市时区）自动生成，节假日照常；统计本地完成，建议由 AI 自动起草。',
+            srow('停滞提醒方式', 'weekly：停滞只在偏航报告里体现；daily：保留每日停提醒',
+              h('select', {
+                className: 'wb-select', style: { maxWidth: 210 }, value: form.goalAlertMode ?? 'daily',
+                onChange: (event) => set('goalAlertMode', event.target.value),
+              },
+                h('option', { value: 'daily' }, '每日提醒（保持现状）'),
+                h('option', { value: 'weekly' }, '只在每周偏航报告里提醒'))))] },
+        { id: 'appearance', label: '外观', hint: '主题 · 每日一句', items: [section('外观', '修改后立即生效，不需要保存。',
             srow('时间显示', null,
               h('div', { className: 'wb-row' },
                 h('div', { className: 'wb-seg' },
@@ -8597,22 +8578,64 @@ window.__ModuleLoader__.load({
                   h('span', { className: 'wb-small wb-muted' }, '浅色时段'),
                   h('input', { className: 'wb-input', type: 'time', style: { width: 104 }, value: form.themeLightStart ?? '07:00', onChange: (event) => setAppearance('themeLightStart', event.target.value) }),
                   h('span', { className: 'wb-small wb-muted' }, '—'),
-                  h('input', { className: 'wb-input', type: 'time', style: { width: 104 }, value: form.themeLightEnd ?? '19:00', onChange: (event) => setAppearance('themeLightEnd', event.target.value) })) : null))),
-          section('节假日', '节假日不提醒；调休上班的周末照常提醒。每行一个日期，格式 YYYY-MM-DD。',
-            h('div', { className: 'wb-settings-grid' },
-              h('label', { className: 'wb-form-field' }, '节假日',
-                h('textarea', { className: 'wb-textarea', rows: 4, value: form.holidaysText, placeholder: '2026-10-01', onChange: (event) => set('holidaysText', event.target.value) })),
-              h('label', { className: 'wb-form-field' }, '调休上班',
-                h('textarea', { className: 'wb-textarea', rows: 4, value: form.extraText, placeholder: '2026-10-11', onChange: (event) => set('extraText', event.target.value) })))),
-          h(QuotesSettings, { key: 'quotes', show, ai }),
-          state.debug === true ? h('div', { className: 'wb-card', key: 'debug' },
+                  h('input', { className: 'wb-input', type: 'time', style: { width: 104 }, value: form.themeLightEnd ?? '19:00', onChange: (event) => setAppearance('themeLightEnd', event.target.value) })) : null))), h(QuotesSettings, { key: 'quotes', show, ai })] },
+        { id: 'privacy', label: '隐私与数据', hint: '隐私 · 使用统计', items: [section('隐私', '人生面内容只在本机；工作汇报永远不包含北极星、杠杆和偏航报告。',
+            srow('允许 AI 读取一句话愿景和规则', '用于杠杆推荐、偏航建议、目标拆解；反愿景和身份宣言永不发送',
+              h(Switch, {
+                checked: northStar.shareWithAI === true, label: '允许 AI 读取一句话愿景和规则',
+                onChange: (value) => setNorthStar({ shareWithAI: value }),
+              })),
+            northStar.shareWithAI === true
+              ? h('div', { className: 'wb-privacy-preview' },
+                h('div', { className: 'wb-hint' }, '将发送给模型的确切内容（不含反愿景与身份宣言）：'),
+                h('pre', { className: 'wb-privacy-text' }, sharePreview ?? '读取中…'))
+              : null,
+            srow('北极星防窥遮挡', '打开北极星页和目标页时默认模糊显示，点击才显示',
+              h(Switch, {
+                checked: northStar.blur !== false, label: '北极星防窥遮挡',
+                onChange: (value) => setNorthStar({ blur: value }),
+              })),
+            h('div', { className: 'wb-privacy-note' }, '团队 / 上级周报永远不会包含北极星、杠杆、偏航报告，这一条没有开关。')), section('我的使用统计', '只有数字，没有内容；保存在本机，超过 180 天自动清理。',
+            metrics
+              ? h('div', { className: 'wb-metrics' },
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.activeDays), h('span', null, '活跃天数')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.report ?? 0), h('span', null, '日报')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.leverSet ?? 0), h('span', null, '设定杠杆')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.leverItems ?? 0), h('span', null, '杠杆条目')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.northstarSave ?? 0), h('span', null, '保存北极星')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.driftBuild ?? 0), h('span', null, '生成偏航')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.driftOpen ?? 0), h('span', null, '打开偏航')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.adviceAcceptRate == null ? '—' : `${metrics.adviceAcceptRate}%`), h('span', null, '建议采纳率')),
+                h('button', {
+                  className: 'wb-btn sm ghost', style: { alignSelf: 'center' },
+                  onClick: () => {
+                    const text = `知行最近 ${metrics.weeks} 周：活跃 ${metrics.activeDays} 天；日报 ${metrics.totals?.report ?? 0} 份；杠杆设定 ${metrics.totals?.leverSet ?? 0} 次、${metrics.totals?.leverItems ?? 0} 条；保存北极星 ${metrics.totals?.northstarSave ?? 0} 次；生成偏航 ${metrics.totals?.driftBuild ?? 0} 次、打开 ${metrics.totals?.driftOpen ?? 0} 次；建议采纳率 ${metrics.adviceAcceptRate == null ? '—' : `${metrics.adviceAcceptRate}%`}。`
+                    navigator.clipboard?.writeText(text).then(() => show('已复制使用统计')).catch(() => show('复制失败，可截图分享', 'error'))
+                  },
+                }, '复制为文本'))
+              : h('div', { className: 'wb-hint' }, '统计加载中…'))] },
+        ...(state.debug === true ? [{ id: 'debug', label: '调试', hint: '测试入口', items: [state.debug === true ? h('div', { className: 'wb-card', key: 'debug' },
             h('details', { className: 'wb-adv' },
               h('summary', null, '调试'),
               h('div', { className: 'wb-hint', style: { marginBottom: 6 } }, '不改系统时间，结果记录到 log.md 并标 [测试]。'),
               srow('模拟 9:00 提醒', '马上触发一次早安提醒，看看效果', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/morning', { channel: 'auto' }); await refresh(); show(`早安提醒：${r.channel}，${r.count ?? 0} 项`) } catch (e) { show(e.message, 'error') } } }, '执行')),
               srow('模拟 18:00 提醒', '马上触发一次晚报提醒', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/evening', { channel: 'auto' }); await refresh(); show(r.skipped ? `晚报：${r.skipped}` : `晚报提醒：${r.channel}`) } catch (e) { show(e.message, 'error') } } }, '执行')),
               srow('检查目标提醒', '检查有没有停滞或有风险的目标', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/goal-check', { force: true, channel: 'auto' }); await refresh(); show(`目标检查：${(r.alerts ?? []).length} 条提醒`) } catch (e) { show(e.message, 'error') } } }, '执行')),
-              srow('立即检查', '马上跑一遍所有提醒规则', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/tick', { force: true }); await refresh(); show(`tick：${JSON.stringify(r).slice(0, 120)}`) } catch (e) { show(e.message, 'error') } } }, '执行')))) : null),
+              srow('立即检查', '马上跑一遍所有提醒规则', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/tick', { force: true }); await refresh(); show(`tick：${JSON.stringify(r).slice(0, 120)}`) } catch (e) { show(e.message, 'error') } } }, '执行')))) : null] }] : []),
+      ]
+      const activeSettingsGroup = settingsGroups.find((group) => group.id === settingsGroup) ?? settingsGroups[0]
+      return h(React.Fragment, null,
+        h('div', { className: 'wb-settings-shell' },
+          h('nav', { className: 'wb-settings-nav', 'aria-label': '设置分类' },
+            settingsGroups.map((group) => h('button', {
+              key: group.id, type: 'button',
+              className: `wb-settings-nav-item${activeSettingsGroup.id === group.id ? ' on' : ''}`,
+              'aria-current': activeSettingsGroup.id === group.id ? 'page' : undefined,
+              onClick: () => setSettingsGroup(group.id),
+            },
+            h('span', { className: 'wb-settings-nav-label' }, group.label),
+            h('span', { className: 'wb-settings-nav-hint' }, group.hint)))),
+          h('div', { className: 'wb-settings wb-settings-pane' }, activeSettingsGroup.items)),
         dirty && dirtyCount
           ? h('div', { className: 'wb-savebar', role: 'status' },
             h('span', null, `有 ${dirtyCount} 项修改未保存`),
