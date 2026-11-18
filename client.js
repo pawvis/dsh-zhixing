@@ -1889,6 +1889,34 @@ window.__ModuleLoader__.load({
       /* ===== 今日页：今天吃什么 / 今日运势（feature-c） ===== */
       .wb-lucky-actions{display:flex;gap:8px;margin-left:auto;align-self:center;flex:0 0 auto;flex-wrap:wrap}
       @media(max-width:1100px){.wb-lucky-actions{flex-basis:100%;justify-content:flex-end;margin-left:0}}
+      .wb-northstar{padding:16px 18px}
+      .wb-ns-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+      .wb-ns-main{position:relative;border-radius:12px;overflow:hidden}
+      .wb-ns-section{margin:14px 0}
+      .wb-ns-label{font-size:11px;color:var(--wb-text-3);letter-spacing:.04em;margin-bottom:4px}
+      .wb-ns-text{font-size:14px;line-height:1.8;white-space:pre-wrap;color:var(--wb-text)}
+      .wb-ns-identity{padding:8px 0;border-bottom:1px dashed var(--wb-border)}
+      .wb-ns-evidence{margin-top:4px;padding:0;border:0;background:transparent;color:var(--wb-accent);font-size:11px;cursor:pointer}
+      .wb-ns-evlist{margin-top:4px;padding:4px 0 2px 10px;border-left:2px solid var(--wb-border);display:flex;flex-direction:column;gap:3px}
+      .wb-ns-blurred{filter:blur(7px);user-select:none;pointer-events:none}
+      .wb-ns-veil{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--wb-text-2);background:rgba(127,127,127,.06);border-radius:12px;cursor:pointer}
+      .wb-ns-foot{display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:10px;border-top:1px solid var(--wb-border);font-size:11px;color:var(--wb-text-3)}
+      .wb-ns-intro p{font-size:13px;line-height:1.8;color:var(--wb-text-2);margin:0 0 8px}
+      .wb-ns-question{font-size:12px;color:var(--wb-text-2);margin:2px 0 6px}
+      .wb-ns-history-list{display:flex;flex-direction:column;gap:4px}
+      .wb-ns-history-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--wb-border);border-radius:9px;background:transparent;text-align:left;cursor:pointer}
+      .wb-ns-history-item:hover{background:rgba(127,127,127,.06)}
+      .wb-ns-history-doc{margin:0;padding:10px 12px;border-radius:10px;background:rgba(127,127,127,.06);font-size:11px;line-height:1.7;white-space:pre-wrap;max-height:420px;overflow:auto}
+      .wb-diff-add{background:rgba(34,197,94,.14)}
+      .wb-diff-del{background:rgba(239,68,68,.14);text-decoration:line-through}
+      .wb-ns-strip{display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:10px;border:1px solid var(--wb-border);border-radius:10px;background:rgba(127,127,127,.03);flex-wrap:wrap}
+      .wb-ns-strip-label{font-size:11px;color:var(--wb-text-3)}
+      .wb-ns-strip-text{font-size:12px;color:var(--wb-text-2)}
+      .wb-ns-strip-text.blurred{filter:blur(5px);user-select:none}
+      .wb-ns-guide{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:10px;border:1px dashed var(--wb-border);border-radius:12px;background:rgba(127,127,127,.03);flex-wrap:wrap}
+      .wb-privacy-preview{margin:6px 0 4px;padding:8px 10px;border-radius:8px;background:rgba(127,127,127,.06)}
+      .wb-privacy-text{margin:4px 0 0;font-size:11px;line-height:1.6;white-space:pre-wrap;max-height:140px;overflow:auto}
+      .wb-privacy-note{margin-top:6px;font-size:11px;color:var(--wb-text-3)}
       .wb-lever-card{padding:12px 14px}
       .wb-lever-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
       .wb-lever-title-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -4466,6 +4494,289 @@ window.__ModuleLoader__.load({
           autoGenerate: Boolean(reportEditor.autoGenerate),
         }) : null,
       )
+    }
+
+    /** 2.0 · 北极星页（人生面） */
+    function NorthStarTab({ state, show, onOpenSettings }) {
+      const [data, setData] = useState(null)
+      const [loading, setLoading] = useState(true)
+      const [error, setError] = useState('')
+      const [wizard, setWizard] = useState(false)
+      const [history, setHistory] = useState(false)
+      const [revealed, setRevealed] = useState(false)
+      const [expanded, setExpanded] = useState(new Set())
+      const blurEnabled = state?.settings?.northStar?.blur !== false
+      const load = useCallback(async () => {
+        try {
+          const result = await request('/northstar')
+          setData(result)
+          setError('')
+        } catch (err) { setError(err.message) } finally { setLoading(false) }
+      }, [])
+      useEffect(() => { void load() }, [load])
+      const blurred = blurEnabled && !revealed
+      const toggleEvidence = (id) => setExpanded((current) => {
+        const next = new Set(current)
+        if (next.has(id)) next.delete(id); else next.add(id)
+        return next
+      })
+      const exportMarkdown = async () => {
+        try {
+          const current = data?.raw ? data : await request('/northstar')
+          if (!current?.raw) { show('还没有可导出的北极星', 'error'); return }
+          if (typeof window !== 'undefined' && typeof window.confirm === 'function' && !window.confirm('导出北极星 Markdown？文件只会保存到你选择的位置。')) return
+          downloadBlob('北极星.md', new Blob([current.raw], { type: 'text/markdown;charset=utf-8' }))
+          show('已导出北极星.md')
+        } catch (err) { show(err.message, 'error') }
+      }
+
+      if (loading) return h('div', { className: 'wb-card' }, h(Skeleton, { rows: 5 }))
+      if (error) {
+        return h(EmptyState, {
+          title: '北极星没加载出来', text: error,
+          action: h('button', { className: 'wb-btn primary sm', onClick: () => { setLoading(true); void load() } }, '重试'),
+        })
+      }
+      if (!data?.exists) {
+        return h('div', { className: 'wb-card wb-northstar' },
+          h('div', { className: 'wb-ns-head' },
+            h('div', { className: 'wb-card-title' }, '北极星 🔒'),
+            h('div', { className: 'wb-spacer' })),
+          h('div', { className: 'wb-empty-state' },
+            h('b', null, '以后再写也可以'),
+            h('div', { className: 'wb-small' }, '用几句话写下你不想变成什么样、想往哪去、要成为什么样的人。只存本机，AI 不会代写。'),
+            h('button', { className: 'wb-btn primary sm', onClick: () => setWizard(true) }, '写北极星')))
+      }
+
+      return h('div', null,
+        h('div', { className: 'wb-card wb-northstar' },
+          h('div', { className: 'wb-ns-head' },
+            h('div', { className: 'wb-card-title' }, '北极星 🔒'),
+            h('span', { className: 'wb-badge' }, `v${data.version} · ${String(data.updatedAt ?? '').slice(0, 10)}`),
+            h('div', { className: 'wb-spacer' }),
+            blurEnabled ? h('button', { className: 'wb-btn ghost sm', onClick: () => setRevealed(!revealed) }, revealed ? '遮挡' : '显示') : null,
+            h('button', { className: 'wb-btn sm', onClick: () => setWizard(true) }, '编辑'),
+            h('button', { className: 'wb-btn sm ghost', onClick: () => setHistory(true) }, '历史'),
+            h('button', { className: 'wb-btn sm ghost', onClick: exportMarkdown }, '导出')),
+          h('div', { className: 'wb-ns-main', onClick: blurred ? () => setRevealed(true) : undefined },
+            h('div', { className: blurred ? 'wb-ns-blurred' : '' },
+              h('div', { className: 'wb-ns-section' },
+                h('div', { className: 'wb-ns-label' }, '我拒绝让我的生活变成'),
+                data.antiVision ? h('div', { className: 'wb-ns-text' }, data.antiVision) : h('div', { className: 'wb-hint' }, '（还没写）')),
+              h('div', { className: 'wb-ns-section' },
+                h('div', { className: 'wb-ns-label' }, '我正在奔向（一句话愿景，会变）'),
+                data.vision ? h('div', { className: 'wb-ns-text' }, data.vision) : h('div', { className: 'wb-hint' }, '（还没写）')),
+              h('div', { className: 'wb-ns-section' },
+                h('div', { className: 'wb-ns-label' }, '我是……的人'),
+                data.identity.length
+                  ? data.identity.map((item) => h('div', { key: item.id, className: 'wb-ns-identity' },
+                    h('div', { className: 'wb-ns-text' }, item.text),
+                    h('button', {
+                      className: 'wb-ns-evidence', onClick: () => toggleEvidence(item.id),
+                    }, `本月证据 ${item.evidenceCount} 条 ${expanded.has(item.id) ? '▾' : '▸'}`),
+                    expanded.has(item.id)
+                      ? h('div', { className: 'wb-ns-evlist' },
+                        item.evidence.length
+                          ? item.evidence.map((entry, index) => h('div', { key: index, className: 'wb-small wb-muted' }, `${entry.date} ${entry.text}`))
+                          : h('div', { className: 'wb-hint' }, '本月还没有证据'))
+                      : null))
+                  : h('div', { className: 'wb-hint' }, '（还没写）')),
+              h('div', { className: 'wb-ns-section' },
+                h('div', { className: 'wb-ns-label' }, '我的规则（不愿意牺牲的）'),
+                data.rules.length ? h('div', { className: 'wb-ns-text' }, data.rules.join('；')) : h('div', { className: 'wb-hint' }, '（还没写）'))),
+            blurred ? h('div', { className: 'wb-ns-veil' }, '点击显示') : null),
+          h('div', { className: 'wb-ns-foot' },
+            h('span', null, '只在本机 · 默认不发给模型 · 不进周报'),
+            h('button', { className: 'wb-btn ghost sm', onClick: onOpenSettings }, '设置隐私开关'))),
+        wizard ? h(NorthStarWizard, {
+          data, onClose: () => setWizard(false),
+          onSaved: async () => { await load() },
+          show,
+        }) : null,
+        history ? h(NorthStarHistory, { onClose: () => setHistory(false), show }) : null)
+    }
+
+    /** 2.0 · 北极星四步向导（没有 AI 代写） */
+    function NorthStarWizard({ data, onClose, onSaved, show }) {
+      const steps = ['开始', '反愿景', '一句话愿景', '身份宣言与规则']
+      const [step, setStep] = useState(0)
+      const [fields, setFields] = useState({
+        antiVision: data?.antiVision ?? '',
+        vision: data?.vision ?? '',
+        identityText: (data?.identity ?? []).map((item) => item.text).join('\n'),
+        rulesText: (data?.rules ?? []).join('\n'),
+      })
+      const [saveChoice, setSaveChoice] = useState(false)
+      const [busy, setBusy] = useState('')
+      const [error, setError] = useState('')
+      const set = (key, value) => { setFields((current) => ({ ...current, [key]: value })); setError('') }
+      const identityList = () => fields.identityText.split('\n').map((line) => line.trim()).filter(Boolean)
+      const rulesList = () => fields.rulesText.split('\n').map((line) => line.trim()).filter(Boolean)
+
+      const saveDraft = async () => {
+        setBusy('draft')
+        try {
+          const text = `反愿景：${fields.antiVision}\n一句话愿景：${fields.vision}\n身份宣言：\n${identityList().join('\n')}\n规则：\n${rulesList().join('\n')}`
+          await request('/northstar/draft', { text })
+          show('草稿已保存')
+        } catch (err) { setError(err.message) } finally { setBusy('') }
+      }
+      const submit = async (mode) => {
+        setBusy('save')
+        try {
+          const result = await request('/northstar/save', {
+            fields: {
+              antiVision: fields.antiVision,
+              vision: fields.vision,
+              identity: identityList(),
+              rules: rulesList(),
+            },
+            mode,
+          })
+          await onSaved?.()
+          show(`北极星已保存为 v${result.version}`)
+          onClose()
+        } catch (err) { setError(err.message); setBusy('') }
+      }
+      const hasContent = () => Boolean(fields.antiVision.trim() || fields.vision.trim() || identityList().length || rulesList().length)
+      const next = () => {
+        if (step < 3) { setStep(step + 1); return }
+        if (!hasContent()) { onClose(); return }
+        if (data?.exists) setSaveChoice(true)
+        else void submit('minor')
+      }
+      const skip = () => {
+        if (step === 0) { onClose(); return }
+        next()
+      }
+      const body = step === 0
+        ? h('div', null,
+          h('div', { className: 'wb-ns-intro' },
+            h('p', null, '北极星不是计划，是你想去的方向的几句话。它只存在本机，不会发给模型，也不会进周报。'),
+            h('p', null, '四步都可以跳过，写几个字也行，以后随时可以改。这里没有「AI 帮我写」按钮：这一步只属于你。'),
+            h('div', { className: 'wb-hint' }, '建议 15 分钟；写一半可以点「保存草稿」，下次继续。'),
+            data?.draft ? h('div', { className: 'wb-ns-draft' },
+              h('b', null, '上次草稿：'),
+              h('div', { className: 'wb-small' }, String(data.draft).replace(/\s+/g, ' ').slice(0, 120))) : null))
+        : step === 1
+          ? h(React.Fragment, null,
+            h('div', { className: 'wb-ns-question' }, '如果接下来 5 年什么都不改变，你平常的一天大概是什么样？'),
+            h('div', { className: 'wb-ns-question' }, '其中哪一部分，是你最不愿意接受的？'),
+            h('textarea', {
+              className: 'wb-textarea', rows: 6, autoFocus: true, value: fields.antiVision,
+              placeholder: '我拒绝让我的生活变成……',
+              onChange: (event) => set('antiVision', event.target.value),
+            }))
+          : step === 2
+            ? h(React.Fragment, null,
+              h('div', { className: 'wb-ns-question' }, '如果 3 年后某个普通的日子让你挺满意，那天是什么样？'),
+              h('div', { className: 'wb-ns-question' }, '用一句话写下你正在奔向的方向——它以后会变，先写个第一版。'),
+              h('textarea', {
+                className: 'wb-textarea', rows: 4, autoFocus: true, value: fields.vision,
+                placeholder: '我正在奔向……',
+                onChange: (event) => set('vision', event.target.value),
+              }))
+            : h(React.Fragment, null,
+              h('div', { className: 'wb-ns-question' }, '过上那样的日子，需要你成为什么样的人？用「我是……的人」写 1–3 句。'),
+              h('textarea', {
+                className: 'wb-textarea', rows: 4, autoFocus: true, value: fields.identityText,
+                placeholder: '我是……的人（每行一条）',
+                onChange: (event) => set('identityText', event.target.value),
+              }),
+              h('div', { className: 'wb-ns-question', style: { marginTop: 10 } }, '为了这些，有什么是你不愿意牺牲的？'),
+              h('textarea', {
+                className: 'wb-textarea', rows: 3, value: fields.rulesText,
+                placeholder: '不牺牲睡眠；周日陪家人（每行一条，可留空）',
+                onChange: (event) => set('rulesText', event.target.value),
+              }))
+
+      return h(Modal, {
+        title: `写下你的北极星 · 第 ${step + 1}/4 步`,
+        size: 'md',
+        onClose,
+        footer: saveChoice
+          ? [
+            h('button', { key: 'back', className: 'wb-btn', disabled: Boolean(busy), onClick: () => setSaveChoice(false) }, '返回'),
+            h('button', { key: 'minor', className: 'wb-btn', disabled: Boolean(busy), onClick: () => void submit('minor') }, '小修改（覆盖当前）'),
+            h('button', { key: 'version', className: 'wb-btn primary', disabled: Boolean(busy), onClick: () => void submit('version') }, '存为新版本'),
+          ]
+          : [
+            h('button', { key: 'prev', className: 'wb-btn', disabled: step === 0 || Boolean(busy), onClick: () => setStep(step - 1) }, '上一步'),
+            h('button', { key: 'skip', className: 'wb-btn ghost', disabled: Boolean(busy), onClick: skip }, step === 0 ? '跳过向导' : '跳过这一步'),
+            h('button', { key: 'draft', className: 'wb-btn ghost', disabled: Boolean(busy), onClick: () => void saveDraft() }, busy === 'draft' ? '保存中…' : '保存草稿'),
+            h('button', {
+              key: 'next', className: 'wb-btn primary', disabled: Boolean(busy),
+              onClick: next,
+            }, busy === 'save' ? '保存中…' : step === 3 ? '保存' : '下一步'),
+          ],
+      },
+      h('div', { className: 'wb-hint', style: { marginBottom: 8 } }, `${steps[step]} · 这些内容只存在本机，默认不发给模型`),
+      saveChoice ? h('div', { className: 'wb-warnbox', style: { marginBottom: 8 } }, '这次保存要覆盖当前版本，还是保留历史、升一个新版本？') : null,
+      body,
+      error ? h('div', { className: 'wb-field-error', style: { marginTop: 8 } }, error) : null)
+    }
+
+    /** 2.0 · 北极星历史（只读 + 简单逐行对比） */
+    function NorthStarHistory({ onClose, show }) {
+      const [items, setItems] = useState([])
+      const [loading, setLoading] = useState(true)
+      const [view, setView] = useState(null)
+      const [compare, setCompare] = useState(null)
+      const [busy, setBusy] = useState('')
+      useEffect(() => {
+        let alive = true
+        request('/northstar/history')
+          .then((data) => { if (alive) setItems(data.items ?? []) })
+          .catch((error) => show(error.message, 'error'))
+          .finally(() => { if (alive) setLoading(false) })
+        return () => { alive = false }
+      }, [show])
+      const open = async (item) => {
+        setBusy(`read:${item.version}`)
+        try {
+          const current = await request(`/northstar/history/read?v=${item.version}`)
+          setView(current)
+          const previous = items.find((entry) => entry.version < item.version)
+          setCompare(previous ? await request(`/northstar/history/read?v=${previous.version}`) : null)
+        } catch (error) { show(error.message, 'error') } finally { setBusy('') }
+      }
+      const lineDiff = (before, after) => {
+        const beforeLines = String(before ?? '').split('\n')
+        const afterLines = String(after ?? '').split('\n')
+        const beforeSet = new Set(beforeLines)
+        const afterSet = new Set(afterLines)
+        return [
+          ...afterLines.map((line) => ({ kind: beforeSet.has(line) ? 'same' : 'add', line })),
+          ...beforeLines.filter((line) => !afterSet.has(line)).map((line) => ({ kind: 'del', line })),
+        ]
+      }
+      const body = view
+        ? h('div', null,
+          h('div', { className: 'wb-row', style: { marginBottom: 8 } },
+            h('button', { className: 'wb-btn ghost sm', onClick: () => { setView(null); setCompare(null) } }, '← 返回列表'),
+            h('span', { className: 'wb-hint' }, `v${view.version} · ${view.date}`)),
+          h('pre', { className: 'wb-ns-history-doc' },
+            (compare ? lineDiff(compare.markdown, view.markdown) : view.markdown.split('\n').map((line) => ({ kind: 'same', line })))
+              .map((entry, index) => h('span', {
+                key: index,
+                className: entry.kind === 'add' ? 'wb-diff-add' : entry.kind === 'del' ? 'wb-diff-del' : '',
+              }, `${entry.kind === 'add' ? '+' : entry.kind === 'del' ? '-' : ' '} ${entry.line}\n`))))
+        : loading
+          ? h('div', { style: { padding: 8 } }, h(Skeleton, { rows: 3 }))
+          : items.length
+            ? h('div', { className: 'wb-ns-history-list' }, items.map((item) => h('button', {
+              key: item.name, className: 'wb-ns-history-item', disabled: Boolean(busy),
+              onClick: () => void open(item),
+            },
+            h('span', { className: 'wb-small', style: { fontWeight: 600 } }, `v${item.version}`),
+            h('span', { className: 'wb-small wb-muted' }, item.date),
+            h('span', { className: 'wb-spacer' }),
+            h('span', { className: 'wb-small' }, '查看'))))
+            : h('div', { className: 'wb-empty-state' }, h('b', null, '还没有历史版本'), h('div', { className: 'wb-small' }, '保存时选「存为新版本」会在这里保留旧版本。'))
+      return h(Modal, {
+        title: '北极星历史', size: 'md', onClose,
+        footer: [h('button', { key: 'close', className: 'wb-btn', onClick: onClose }, '关闭')],
+      }, body)
     }
 
     /** 2.0 · 今日杠杆卡（今日页 DailyBanner 下方） */
@@ -7200,7 +7511,7 @@ window.__ModuleLoader__.load({
       return { startDate: keyOf(monday), endDate: keyOf(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6)) }
     }
 
-    function GoalsTab({ refreshState, show, suggestions, onApplySuggestion, onDismissSuggestion, ai }) {
+    function GoalsTab({ refreshState, show, suggestions, onApplySuggestion, onDismissSuggestion, ai, settings, onOpenNorthStar }) {
       const [goals, setGoals] = useState([])
       const [alerts, setAlerts] = useState({})
       const [loading, setLoading] = useState(true)
@@ -7218,7 +7529,17 @@ window.__ModuleLoader__.load({
       const [preview, setPreview] = useState([])
       const [importEditing, setImportEditing] = useState('')
       const [importCollapsed, setImportCollapsed] = useState({})
+      const [northStar, setNorthStar] = useState(null)
+      const [visionRevealed, setVisionRevealed] = useState(false)
+      const [guideDismissed, setGuideDismissed] = useState(() => {
+        try { return window.localStorage?.getItem('wb.northstar.introDismissed') === '1' } catch { return false }
+      })
       const fileRef = useRef(null)
+      useEffect(() => {
+        let alive = true
+        request('/northstar').then((data) => { if (alive) setNorthStar(data) }).catch(() => {})
+        return () => { alive = false }
+      }, [])
 
       const load = useCallback(async () => {
         try {
@@ -7318,6 +7639,29 @@ window.__ModuleLoader__.load({
 
       return h(React.Fragment, null,
         h(Suggestions, { items: suggestions, onApply: onApplySuggestion, onDismiss: onDismissSuggestion }),
+        northStar?.exists
+          ? h('div', { className: 'wb-ns-strip' },
+            h('span', { className: 'wb-ns-strip-label' }, '一句话愿景'),
+            h('span', { className: `wb-ns-strip-text${settings?.northStar?.blur !== false && !visionRevealed ? ' blurred' : ''}` }, northStar.vision || '（还没写）'),
+            settings?.northStar?.blur !== false
+              ? h('button', { className: 'wb-btn ghost sm', onClick: () => setVisionRevealed(!visionRevealed) }, visionRevealed ? '遮挡' : '显示')
+              : null,
+            h('button', { className: 'wb-btn ghost sm', onClick: onOpenNorthStar }, '去北极星'))
+          : (!guideDismissed
+            ? h('div', { className: 'wb-ns-guide' },
+              h('div', { className: 'wb-ns-guide-text' },
+                h('b', null, '给目标找个方向'),
+                h('div', { className: 'wb-hint' }, '约 15 分钟，可跳过。写下北极星后，目标和杠杆会更有方向。')),
+              h('div', { className: 'wb-spacer' }),
+              h('button', { className: 'wb-btn sm ai', onClick: onOpenNorthStar }, '去写北极星'),
+              h('button', {
+                className: 'wb-btn sm ghost',
+                onClick: () => {
+                  setGuideDismissed(true)
+                  try { window.localStorage?.setItem('wb.northstar.introDismissed', '1') } catch { /* 忽略 */ }
+                },
+              }, '知道了'))
+            : null),
         h('div', { className: 'wb-card' },
           h('div', { className: 'wb-card-head' },
             h('div', { className: 'wb-card-title' }, '我的目标'),
@@ -7770,6 +8114,7 @@ window.__ModuleLoader__.load({
     function SettingsTab({ state, refresh, show, ai }) {
       const [form, setForm] = useState(null)
       const [dirty, setDirty] = useState(false)
+      const [sharePreview, setSharePreview] = useState(null)
       const [nowTick, setNowTick] = useState(() => new Date())
       useEffect(() => {
         const timer = setInterval(() => setNowTick(new Date()), 1000)
@@ -7783,6 +8128,17 @@ window.__ModuleLoader__.load({
           extraText: (state.settings.extraWorkdays ?? []).join('\n'),
         })
       }, [state.settings, dirty])
+      useEffect(() => {
+        if (!form?.northStar?.shareWithAI) { setSharePreview(null); return undefined }
+        let alive = true
+        request('/northstar').then((data) => {
+          if (!alive) return
+          setSharePreview(data?.exists
+            ? [data.vision ? `一句话愿景：${data.vision}` : '', Array.isArray(data.rules) && data.rules.length ? `规则：${data.rules.join('；')}` : ''].filter(Boolean).join('\n')
+            : '（还没有北极星）')
+        }).catch(() => { if (alive) setSharePreview('（读取失败）') })
+        return () => { alive = false }
+      }, [form?.northStar?.shareWithAI])
       if (!form) return null
       const off = aiOffOf(ai)
       const set = (key, value) => { setForm({ ...form, [key]: value }); setDirty(true) }
@@ -7842,6 +8198,11 @@ window.__ModuleLoader__.load({
         type: 'button', className: `wb-switch${checked ? ' on' : ''}`, role: 'switch',
         'aria-checked': Boolean(checked), 'aria-label': label, onClick: () => onChange(!checked),
       })
+      const northStar = form.northStar ?? { shareWithAI: false, blur: true }
+      const setNorthStar = (patch) => {
+        setForm({ ...form, northStar: { ...northStar, ...patch } })
+        setDirty(true)
+      }
       const hm = (key, label) => {
         const [hh, mm] = String(form[key] ?? '09:00').split(':')
         return h('div', { className: 'wb-row', style: { gap: 4 } },
@@ -7877,6 +8238,23 @@ window.__ModuleLoader__.load({
             srow('早安只推杠杆', '关闭后早安通知还会列出当天待办', h(Switch, {
               checked: form.leverMorningOnly !== false, label: '早安只推杠杆', onChange: (value) => set('leverMorningOnly', value),
             }))),
+          section('隐私', '人生面内容只在本机；工作汇报永远不包含北极星、杠杆和偏航报告。',
+            srow('允许 AI 读取一句话愿景和规则', '用于杠杆推荐、偏航建议、目标拆解；反愿景和身份宣言永不发送',
+              h(Switch, {
+                checked: northStar.shareWithAI === true, label: '允许 AI 读取一句话愿景和规则',
+                onChange: (value) => setNorthStar({ shareWithAI: value }),
+              })),
+            northStar.shareWithAI === true
+              ? h('div', { className: 'wb-privacy-preview' },
+                h('div', { className: 'wb-hint' }, '将发送给模型的确切内容（不含反愿景与身份宣言）：'),
+                h('pre', { className: 'wb-privacy-text' }, sharePreview ?? '读取中…'))
+              : null,
+            srow('北极星防窥遮挡', '打开北极星页和目标页时默认模糊显示，点击才显示',
+              h(Switch, {
+                checked: northStar.blur !== false, label: '北极星防窥遮挡',
+                onChange: (value) => setNorthStar({ blur: value }),
+              })),
+            h('div', { className: 'wb-privacy-note' }, '团队 / 上级周报永远不会包含北极星、杠杆、偏航报告，这一条没有开关。')),
           section('地区与时间', '影响天气、时钟和时区。插件里的日期、时间、提醒和「今天吃什么」都按这里的城市时区计算。',
             (() => {
               const regionValue = form.region || form.weatherCity || ''
@@ -8108,10 +8486,10 @@ window.__ModuleLoader__.load({
         h('div', { className: 'wb-head' },
           h('div', { className: 'wb-title' }, '知行'),
           h('div', { className: 'wb-tabs' },
-            ['today', 'reports', 'goals', 'settings'].map((key) => h('button', {
+            ['today', 'reports', 'goals', 'northstar', 'settings'].map((key) => h('button', {
               key, className: `wb-tab${tab === key ? ' active' : ''}`,
               onClick: () => setTab(key),
-            }, { today: '今日', reports: '日报', goals: '目标', settings: '设置' }[key])),
+            }, { today: '今日', reports: '日报', goals: '目标', northstar: '北极星 🔒', settings: '设置' }[key])),
           ),
           h('div', { className: 'wb-spacer' }),
           state ? h(ModelPicker, { state, refresh, show }) : null,
@@ -8152,9 +8530,11 @@ window.__ModuleLoader__.load({
             })
             : tab === 'reports' ? h(ReportsTab, { state, show })
             : tab === 'goals' ? h(GoalsTab, {
-              refreshState: refresh, show, suggestions, ai: state.ai,
+              refreshState: refresh, show, suggestions, ai: state.ai, settings: state.settings,
               onApplySuggestion: applySuggestion, onDismissSuggestion: dismissSuggestion,
+              onOpenNorthStar: () => setTab('northstar'),
             })
+            : tab === 'northstar' ? h(NorthStarTab, { state, show, onOpenSettings: () => setTab('settings') })
             : h(SettingsTab, { state, refresh, show, ai: state.ai }),
         ),
       )
