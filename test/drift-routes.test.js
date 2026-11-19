@@ -73,3 +73,17 @@ test('偏航 / Boss / 统计路由可用', async (t) => {
   assert.equal(badWeek.status, 400)
   await store.readJson('goals', {})
 })
+
+test('节假日状态接口读取本地缓存', async (t) => {
+  const { handler, store } = await setup(t)
+  await store.writeJson('.internal/holidays.json', {
+    version: 1,
+    years: { 2026: { year: 2026, holidays: ['2026-10-01', '2026-10-02'], workdays: ['2026-10-10'], fetchedAt: '2026-11-01T00:00:00.000Z', source: 'test', papers: [] } },
+  })
+  const res = await call(handler, { url: '/api/zhixing/holidays?year=2026' })
+  assert.equal(res.status, 200)
+  const data = JSON.parse(res.payload)
+  assert.equal(data.years[0].year, 2026)
+  assert.equal(data.years[0].holidays.length, 2)
+  assert.equal(data.years[0].workdays[0], '2026-10-10')
+})

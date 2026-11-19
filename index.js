@@ -8,7 +8,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { checkGoalAlerts } from './lib/goals.js'
 import { createReminders, deliver } from './lib/reminders.js'
-import { resolveTimezone } from './lib/clock.js'
+import { dateKeyInZone, resolveTimezone } from './lib/clock.js'
+import { ensureHolidayYears } from './lib/holidays.js'
 import { createRoutes } from './lib/routes.js'
 import { Store } from './lib/store.js'
 
@@ -36,6 +37,10 @@ export function apply(ctx, config = {}) {
     .then(async () => {
       // 先把设置里的地区时区装进进程时钟，再启动提醒，避免刚启动时按电脑时区算日期。
       const settings = await store.getSettings()
+      const year = Number(dateKeyInZone(new Date()).slice(0, 4))
+      void ensureHolidayYears(store, [year, year + 1]).catch((error) => {
+        store.appendLog('节假日', `启动自动获取失败：${error.message}`).catch(() => {})
+      })
       stopTimers = reminders.start()
       return store.appendLog('插件启动', `数据目录 ${dataDir}，时区 ${resolveTimezone(settings)}`)
     })

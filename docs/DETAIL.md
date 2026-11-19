@@ -113,6 +113,7 @@ $DSH_HOME/data/知行/
 ├── 北极星/北极星.md          # 2.0 反愿景 / 愿景 / 身份宣言 / 规则（人生面）
 ├── 北极星/身份证据.md        # 2.0 身份证据（人生面）
 ├── 偏航/YYYY-Www.md          # 2.0 偏航报告（人生面）
+├── .internal/holidays.json   # 2.0 自动获取的法定节假日缓存
 ├── .internal/levers.json     # 2.0 今日杠杆
 ├── .internal/drift.json      # 2.0 偏航统计快照
 ├── .internal/metrics.json    # 2.0 本地使用统计（只有数字）

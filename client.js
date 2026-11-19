@@ -1680,6 +1680,7 @@ window.__ModuleLoader__.load({
 
       .wb-settings{display:flex;flex-direction:column;gap:14px;padding-bottom:4px}
       .wb-settings-shell{display:grid;grid-template-columns:190px minmax(0,1fr);gap:16px;align-items:start}
+      .wb-holiday-status{display:flex;align-items:flex-start;gap:12px;padding:8px 10px;margin-bottom:10px;border:1px solid var(--wb-border);border-radius:9px;background:rgba(127,127,127,.03)}
       .wb-settings-nav{display:flex;flex-direction:column;gap:3px;position:sticky;top:8px;padding:6px;border:1px solid var(--wb-border);border-radius:12px;background:var(--wb-card)}
       .wb-settings-nav-item{display:flex;flex-direction:column;gap:1px;padding:8px 10px;border:0;border-radius:8px;background:transparent;text-align:left;cursor:pointer;color:var(--wb-text-2);transition:background .12s ease,color .12s ease}
       .wb-settings-nav-item:hover{background:rgba(127,127,127,.06)}
@@ -8397,6 +8398,8 @@ window.__ModuleLoader__.load({
       const [settingsGroup, setSettingsGroup] = useState('daily')
       const [sharePreview, setSharePreview] = useState(null)
       const [metrics, setMetrics] = useState(null)
+      const [holidayInfo, setHolidayInfo] = useState(null)
+      const [holidayBusy, setHolidayBusy] = useState('')
       const [nowTick, setNowTick] = useState(() => new Date())
       useEffect(() => {
         const timer = setInterval(() => setNowTick(new Date()), 1000)
@@ -8424,6 +8427,11 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         let alive = true
         request('/metrics?weeks=4').then((data) => { if (alive) setMetrics(data) }).catch(() => {})
+        return () => { alive = false }
+      }, [])
+      useEffect(() => {
+        let alive = true
+        request('/holidays').then((data) => { if (alive) setHolidayInfo(data) }).catch(() => {})
         return () => { alive = false }
       }, [])
       if (!form) return null
@@ -8465,6 +8473,15 @@ window.__ModuleLoader__.load({
           await refresh()
           show('设置已保存')
         } catch (error) { show(error.message, 'error') }
+      }
+      const refreshHolidayData = async () => {
+        setHolidayBusy('fetch')
+        try {
+          const data = await request('/holidays/refresh', {})
+          setHolidayInfo(data)
+          const ok = (data.years ?? []).filter((item) => !item.missing).map((item) => item.year)
+          show(ok.length ? `已更新 ${ok.join('、')} 年节假日` : '暂未获取到节假日数据，稍后自动重试')
+        } catch (error) { show(error.message, 'error') } finally { setHolidayBusy('') }
       }
       const dirtyCount = [
         ...Object.keys(form).filter((key) => !['holidaysText', 'extraText'].includes(key)
@@ -8542,12 +8559,22 @@ window.__ModuleLoader__.load({
             })(),
             srow('显示天气', '在今日页顶部显示', h(Switch, {
               checked: form.weatherEnabled !== false, label: '显示天气', onChange: (value) => set('weatherEnabled', value),
-            }))), section('节假日', '节假日不提醒；调休上班的周末照常提醒。每行一个日期，格式 YYYY-MM-DD。',
+            }))), section('节假日', '中国法定节假日与调休安排会自动获取并本地缓存（来源：国务院公告整理），无需手动填写；手动项只用于公司 / 个人特殊安排。',
+            h('div', { className: 'wb-holiday-status' },
+              h('div', { style: { flex: 1, minWidth: 0 } },
+                holidayInfo?.years?.length
+                  ? holidayInfo.years.map((item) => h('div', { key: item.year, className: 'wb-small' },
+                    item.missing
+                      ? `${item.year} 年：暂未获取到（可能尚未公布），会自动重试`
+                      : `${item.year} 年：法定休息 ${item.holidays.length} 天 · 调休上班 ${item.workdays.length} 天 · 更新于 ${String(item.fetchedAt ?? '').slice(0, 10)}`))
+                  : h('div', { className: 'wb-hint' }, '正在读取节假日数据…'),
+                h('div', { className: 'wb-hint', style: { marginTop: 2 } }, '自动数据优先；手动填的节假日可以覆盖自动调休上班日。')),
+              h('button', { className: 'wb-btn sm', disabled: Boolean(holidayBusy), onClick: () => void refreshHolidayData() }, holidayBusy ? '更新中…' : '立即更新')),
             h('div', { className: 'wb-settings-grid' },
-              h('label', { className: 'wb-form-field' }, '节假日',
-                h('textarea', { className: 'wb-textarea', rows: 4, value: form.holidaysText, placeholder: '2026-10-01', onChange: (event) => set('holidaysText', event.target.value) })),
-              h('label', { className: 'wb-form-field' }, '调休上班',
-                h('textarea', { className: 'wb-textarea', rows: 4, value: form.extraText, placeholder: '2026-10-11', onChange: (event) => set('extraText', event.target.value) }))))] },
+              h('label', { className: 'wb-form-field' }, '手动补充节假日（可选）',
+                h('textarea', { className: 'wb-textarea', rows: 3, value: form.holidaysText, placeholder: '公司额外的假期，例如 2026-12-31', onChange: (event) => set('holidaysText', event.target.value) })),
+              h('label', { className: 'wb-form-field' }, '手动补充调休上班（可选）',
+                h('textarea', { className: 'wb-textarea', rows: 3, value: form.extraText, placeholder: '公司额外的上班日，例如 2026-12-27', onChange: (event) => set('extraText', event.target.value) }))))] },
         { id: 'growth', label: '成长', hint: '杠杆 · 偏航报告', items: [section('杠杆', '每天 2–4 个能推动目标的待办；AI 只给候选，确认后才写入。',
             srow('完成动效', '完成杠杆时播放一个轻量动画', h(Switch, {
               checked: form.leverAnimation !== false, label: '完成动效', onChange: (value) => set('leverAnimation', value),
