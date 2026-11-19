@@ -8566,7 +8566,7 @@ window.__ModuleLoader__.load({
                   ? holidayInfo.years.map((item) => h('div', { key: item.year, className: 'wb-small' },
                     item.missing
                       ? `${item.year} 年：暂未获取到（可能尚未公布），会自动重试`
-                      : `${item.year} 年：法定休息 ${item.holidays.length} 天 · 调休上班 ${item.workdays.length} 天 · 更新于 ${String(item.fetchedAt ?? '').slice(0, 10)}`))
+                      : `${item.year} 年：放假 ${item.holidays.length} 天（含连休） · 调休上班 ${item.workdays.length} 天 · 更新于 ${String(item.fetchedAt ?? '').slice(0, 10)}`))
                   : h('div', { className: 'wb-hint' }, '正在读取节假日数据…'),
                 h('div', { className: 'wb-hint', style: { marginTop: 2 } }, '自动数据优先；手动填的节假日可以覆盖自动调休上班日。')),
               h('button', { className: 'wb-btn sm', disabled: Boolean(holidayBusy), onClick: () => void refreshHolidayData() }, holidayBusy ? '更新中…' : '立即更新')),
