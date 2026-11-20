@@ -102,13 +102,14 @@ AI 是**可选的**。不配置模型也能手动写日报、管理待办和目�
 
 1. 安装 DeepSeek Harness Desktop 0.2.x，并确认插件功能已启用。
 2. 安装插件：
-   - **npm**：`dsh plugin --profile desktop add dsh-zhixing`（安装 npm 上的最新版，目前是 1.0.2）；
-   - **从源码**：克隆 `https://github.com/pawvis/dsh-zhixing.git`，在 **Plugins → Add plugin** 里选择克隆下来的文件夹。
+   - **离线包（推荐）**：从 [Releases](https://github.com/pawvis/dsh-zhixing/releases) 下载 `dsh-zhixing-2.0.2.zip`，解压后在 **Plugins → Add plugin** 里选择解压出来的文件夹；
+   - **从源码**：克隆 `https://github.com/pawvis/dsh-zhixing.git`，在 **Plugins → Add plugin** 里选择克隆下来的文件夹；
+   - **npm**：`dsh plugin --profile desktop add dsh-zhixing` 也能装，但 npm 上仍是 `1.0.2`。
 3. 重启 DSH，在左侧栏点 **知行**。
 4. 打开 **设置**，改早晚提醒、地区和时钟。要使用 AI，先在 DSH 里配置模型；插件右上角的模型选择器决定用哪个。
 5. 试一遍闭环：打开某天的日报 → **生成日报草稿** → 修改 → 保存；再去 **目标**，对一份计划用 **文字/文件 AI 拆解**。
 
-> npm 上目前是 `1.0.2`；`v1.1.0` 在发布到 npm 之前，请用 GitHub Release 或离线 zip 安装。不配置 AI 也能用，只是 AI 功能会显示不可用。
+> npm 上目前仍是 `1.0.2`；`v2.0.2` 在发布到 npm 之前，请用 GitHub Release 或离线 zip 安装。不配置 AI 也能用，只是 AI 功能会显示不可用。
 
 ## 隐私与数据
 

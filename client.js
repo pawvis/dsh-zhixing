@@ -9,6 +9,10 @@ window.__ModuleLoader__.load({
     // 后端只有在 ZHIXING_DEBUG=1 时才注册 /debug/*；前端按同一个开关隐藏入口。
     let DEBUG_ENABLED = false
     const PANEL_ID = 'zhixing'
+    // 全局提醒点「打开今日」时，把这条提醒交给知行页做成提醒卡。
+    let pendingNotice = null
+    // 面板还没挂载时，记住提醒要打开哪个 tab（今日 / 复盘 / 目标）。
+    let pendingTab = null
     const CYCLES = ['年', '季度', '月', '周']
     const CYCLE_RANK = { 周: 1, 月: 2, 季度: 3, 年: 4 }
     const CHILD_CYCLE = { 年: '季度', 季度: '月', 月: '周' }
@@ -1487,7 +1491,7 @@ window.__ModuleLoader__.load({
       .wb-modal-head{display:flex;align-items:center;gap:8px}
       .wb-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
       .wb-qbtn{position:fixed;z-index:10020;pointer-events:auto;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border:1px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 36%,var(--dsw-alias-border-l1));background:var(--dsw-alias-bg-overlay);color:var(--dsw-alias-label-primary);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.22);font:12px/1 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;cursor:pointer;white-space:nowrap}
-      .wb-qbtn:hover{background:var(--dsw-alias-bg-layer-2)}
+      .wb-qbtn:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.10))}
       .wb-qbtn:disabled{opacity:.6;cursor:default}
       .wb-qmenu{position:fixed;z-index:9999;min-width:172px;background:#fff;color:#111827;border:1px solid rgba(15,23,42,.12);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.22);padding:4px;display:flex;flex-direction:column}
       .wb-qmenu button{display:flex;align-items:center;gap:8px;border:0;background:transparent;color:inherit;font:12px/1.4 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;padding:7px 10px;border-radius:7px;cursor:pointer;text-align:left}
@@ -1940,8 +1944,45 @@ window.__ModuleLoader__.load({
       .wb-ns-blurred{filter:blur(7px);user-select:none;pointer-events:none}
       .wb-ns-veil{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--wb-text-2);background:rgba(127,127,127,.06);border-radius:12px;cursor:pointer}
       .wb-ns-foot{display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:10px;border-top:1px solid var(--wb-border);font-size:11px;color:var(--wb-text-3)}
-      .wb-ns-intro p{font-size:13px;line-height:1.8;color:var(--wb-text-2);margin:0 0 8px}
-      .wb-ns-question{font-size:12px;color:var(--wb-text-2);margin:2px 0 6px}
+      .wb-ns-titlebar{display:inline-flex;align-items:center;gap:8px;min-width:0}
+      .wb-ns-local{font-size:10px;font-weight:500;color:var(--wb-text-3);border:1px solid var(--wb-border);border-radius:999px;padding:1px 7px;white-space:nowrap}
+      .wb-ns-cover{padding:6px 2px 2px}
+      .wb-ns-restored{font-size:11px;color:var(--wb-text-3);margin-bottom:6px}
+      .wb-ns-link{margin-left:6px;padding:0;border:0;background:transparent;color:var(--wb-text-3);font:inherit;font-size:11px;text-decoration:underline;cursor:pointer}
+      .wb-ns-link:hover{color:var(--wb-text-2)}
+      .wb-ns-cover-title{font-size:24px;line-height:1.3;font-weight:650;letter-spacing:-.01em;margin:0 0 8px}
+      .wb-ns-cover-sub{font-size:13px;line-height:1.7;color:var(--wb-text-2);margin:0 0 14px}
+      .wb-ns-chips{display:flex;gap:6px;flex-wrap:wrap}
+      .wb-ns-chip{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:var(--wb-surface-2);color:var(--wb-text-2);font-size:11px;line-height:1.6;white-space:nowrap}
+      .wb-ns-stage{display:flex;flex-direction:column;gap:10px}
+      .wb-ns-steps{position:relative;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding-top:1px}
+      .wb-ns-steps::before{content:"";position:absolute;top:11px;left:12.5%;right:12.5%;height:1px;background:var(--wb-border)}
+      .wb-ns-step{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;padding:0 4px;border:0;background:transparent;color:var(--wb-text-3);font:inherit;cursor:pointer}
+      .wb-ns-step b{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--wb-card);border:1px solid var(--wb-border-strong);color:var(--wb-text-3);font-size:10px;font-weight:650}
+      .wb-ns-step span{max-width:100%;font-size:11px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .wb-ns-step.on b{background:var(--wb-accent);border-color:var(--wb-accent);color:#fff}
+      .wb-ns-step.on span{color:var(--wb-text);font-weight:600}
+      .wb-ns-step.done b{background:var(--wb-primary-soft);border-color:var(--wb-primary-soft);color:var(--wb-text)}
+      .wb-ns-step:hover span{color:var(--wb-text-2)}
+      .wb-ns-step:disabled{opacity:.55;cursor:default}
+      .wb-ns-step.done span{color:var(--wb-text-2)}
+      .wb-ns-title-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+      .wb-ns-question{font-size:19px;line-height:1.45;font-weight:650;margin:2px 0 0;letter-spacing:-.005em}
+      .wb-ns-help{font-size:12px;line-height:1.65;color:var(--wb-text-2);margin:-4px 0 2px}
+      .wb-ns-input{min-height:132px;font-size:14px;line-height:1.75;padding:10px 12px;resize:vertical}
+      .wb-ns-input::placeholder{color:var(--wb-text-3);opacity:1}
+      .wb-ns-savechoice{display:flex;flex-direction:column;gap:8px;padding:4px 0}
+      .wb-ns-savechoice-title{font-size:16px;font-weight:650;margin-bottom:2px}
+      .wb-ns-saveoption{display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;width:100%;padding:10px 12px;border:1px solid var(--wb-border);border-radius:10px;background:var(--wb-card);color:var(--wb-text);font:inherit;cursor:pointer}
+      .wb-ns-saveoption:hover{border-color:var(--wb-accent);background:var(--wb-primary-soft)}
+      .wb-ns-saveoption:disabled{opacity:.55;cursor:not-allowed}
+      .wb-ns-saveoption b{font-size:13px;font-weight:600}
+      .wb-ns-saveoption span{font-size:11px;color:var(--wb-text-3);line-height:1.5}
+      @media(max-width:420px){
+        .wb-ns-steps{gap:2px}
+        .wb-ns-step{padding:0 2px}
+        .wb-ns-step span{font-size:10px;letter-spacing:-.02em}
+      }
       .wb-ns-history-list{display:flex;flex-direction:column;gap:4px}
       .wb-ns-history-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--wb-border);border-radius:9px;background:transparent;text-align:left;cursor:pointer}
       .wb-ns-history-item:hover{background:rgba(127,127,127,.06)}
@@ -2537,6 +2578,145 @@ window.__ModuleLoader__.load({
           },
         }, '撤销') : null)
       return [node, show]
+    }
+
+    // ---------- 系统通知 ----------
+    // 不用 osascript：macOS 会把那条通知记在「脚本编辑器」名下，点开也回不到 DSH。
+    // 由页面自己发 Web Notification，通知归属 DeepSeek Harness，点击就能回到知行面板。
+    function notificationPermission() {
+      try {
+        const api = typeof globalThis === 'undefined' ? undefined : globalThis.Notification
+        return api && typeof api.permission === 'string' ? api.permission : 'unsupported'
+      } catch { return 'unsupported' }
+    }
+
+    function canUseNotification() {
+      return notificationPermission() === 'granted'
+    }
+
+    function windowInBackground() {
+      try {
+        if (typeof document === 'undefined') return false
+        if (document.visibilityState !== 'visible') return true
+        return typeof document.hasFocus === 'function' ? !document.hasFocus() : false
+      } catch { return false }
+    }
+
+    function noticeTab(kind) {
+      return kind === 'drift' ? 'drift' : String(kind ?? '').startsWith('goal') ? 'goals' : 'today'
+    }
+
+    /** 发一条系统通知；点击时执行 onActivate（用来回到知行面板）。 */
+    function showSystemNotice(notice, onActivate) {
+      if (!notice || !canUseNotification()) return null
+      try {
+        const native = new globalThis.Notification(notice.title || '知行提醒', {
+          body: notice.body || '',
+          tag: notice.id,
+        })
+        native.onclick = () => {
+          try { native.close() } catch { /* 忽略 */ }
+          try { window.focus() } catch { /* 忽略 */ }
+          try { onActivate?.(notice) } catch { /* 忽略 */ }
+        }
+        return native
+      } catch { return null }
+    }
+
+    const GLOBAL_REMINDER_CSS = `
+.wb-gnotice{position:fixed;top:64px;right:20px;z-index:10025;pointer-events:auto;width:min(380px,calc(100vw - 32px));box-sizing:border-box;background:var(--dsw-alias-bg-overlay,var(--dsw-alias-bg-layer-1,#fff));color:var(--dsw-alias-label-primary,#111827);border:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.12));border-left:3px solid var(--dsw-alias-brand-primary,#2563EB);border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.24);padding:12px 14px;display:flex;flex-direction:column;gap:8px;font:13px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+.wb-gnotice-head{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--dsw-alias-label-secondary,var(--dsw-alias-label-primary,#4B5563))}
+.wb-gnotice-title{font-size:13px;font-weight:650;line-height:1.45;word-break:break-word}
+.wb-gnotice-body{font-size:12px;line-height:1.65;color:var(--dsw-alias-label-secondary,var(--dsw-alias-label-primary,#4B5563));white-space:pre-wrap;word-break:break-word;max-height:160px;overflow:auto}
+.wb-gnotice-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:2px}
+.wb-gnotice-btn{height:28px;padding:0 10px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1,rgba(0,0,0,.12));background:transparent;color:var(--dsw-alias-label-primary,#111827);font:inherit;font-size:12px;font-weight:500;cursor:pointer}
+.wb-gnotice-btn:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.10))}
+.wb-gnotice-btn.primary{background:var(--dsw-alias-brand-primary,#2563EB);border-color:var(--dsw-alias-brand-primary,#2563EB);color:#fff}
+.wb-gnotice-btn.primary:hover{filter:brightness(.96)}
+@media(max-width:600px){.wb-gnotice{top:auto;bottom:20px;right:12px;left:12px;width:auto}}
+`
+
+    /** DSH 全局提醒：窗口在前台弹右上角提醒卡；在后台则发系统通知，点一下回到知行。 */
+    function GlobalReminderLayer({ onOpen }) {
+      const [queue, setQueue] = useState([])
+      const seenRef = useRef(new Set())
+      const nativeRef = useRef(new Set())
+      const onOpenRef = useRef(onOpen)
+      onOpenRef.current = onOpen
+
+      const openPanel = useCallback((notice, tab) => {
+        if (tab === 'today') pendingNotice = notice
+        pendingTab = tab === 'today' ? null : tab
+        try { onOpenRef.current?.() } catch { /* 打开失败也不影响关闭提醒 */ }
+        // 等面板挂载/切页完成后再投递，避免事件比监听器先到。
+        setTimeout(() => {
+          try { window.dispatchEvent(new CustomEvent('zhixing:goto', { detail: { tab } })) } catch { /* 忽略 */ }
+          if (tab === 'today' && notice) {
+            try { window.dispatchEvent(new CustomEvent('zhixing:notice', { detail: notice })) } catch { /* 忽略 */ }
+          }
+        }, 60)
+      }, [])
+
+      const finish = useCallback((notice, open) => {
+        if (!notice) return
+        seenRef.current.add(notice.id)
+        setQueue((items) => items.filter((item) => item.id !== notice.id))
+        request('/notice-ack', { ids: [notice.id] }).catch(() => {})
+        if (open) openPanel(notice, noticeTab(notice.kind))
+      }, [openPanel])
+
+      const notifyNative = useCallback((notice) => {
+        if (!notice || nativeRef.current.has(notice.id)) return
+        nativeRef.current.add(notice.id)
+        showSystemNotice(notice, (target) => {
+          // 让 DSH 回到前台（最小化也能还原），再切到对应页签。
+          request('/focus', {}).catch(() => {})
+          finish(target, true)
+        })
+      }, [finish])
+
+      useEffect(() => {
+        let alive = true
+        const beat = async () => {
+          try {
+            const visible = typeof document === 'undefined' ? true : document.visibilityState === 'visible'
+            const data = await request('/heartbeat', { visible, tab: 'global' })
+            if (!alive) return
+            const fresh = (data.notices ?? []).filter((notice) => notice?.id && !seenRef.current.has(notice.id))
+            if (!fresh.length) return
+            setQueue((current) => {
+              const known = new Set(current.map((notice) => notice.id))
+              const next = fresh.filter((notice) => !known.has(notice.id))
+              return next.length ? [...current, ...next] : current
+            })
+            if (windowInBackground()) fresh.forEach(notifyNative)
+          } catch { /* 心跳失败不影响页面 */ }
+        }
+        void beat()
+        const timer = setInterval(() => { void beat() }, 20_000)
+        return () => { alive = false; clearInterval(timer) }
+      }, [notifyNative])
+
+      // 设置页的「测试通知」等场景：从任意位置唤起知行面板。
+      useEffect(() => {
+        const open = () => { try { onOpenRef.current?.() } catch { /* 忽略 */ } }
+        window.addEventListener('zhixing:open', open)
+        return () => window.removeEventListener('zhixing:open', open)
+      }, [])
+
+      const current = queue[0] ?? null
+      const targetTab = noticeTab(current?.kind ?? '')
+      const targetLabel = targetTab === 'drift' ? '打开复盘' : targetTab === 'goals' ? '打开目标' : '打开今日'
+      if (!current) return null
+      return h(React.Fragment, null,
+        h('style', null, GLOBAL_REMINDER_CSS),
+        h('div', { className: 'wb-gnotice', role: 'alertdialog', 'aria-live': 'assertive' },
+          h('div', { className: 'wb-gnotice-head' }, '🔔', '提醒'),
+          h('div', { className: 'wb-gnotice-title' }, current.title || '知行提醒'),
+          h('div', { className: 'wb-gnotice-body' }, current.body || ''),
+          h('div', { className: 'wb-gnotice-actions' },
+            h('button', { type: 'button', className: 'wb-gnotice-btn', onClick: () => finish(current, false) }, '知道了'),
+            h('button', { type: 'button', className: 'wb-gnotice-btn primary', onClick: () => finish(current, true) }, targetLabel))))
     }
 
     function QuickTodoLayer() {
@@ -4772,7 +4952,7 @@ window.__ModuleLoader__.load({
     }
 
     /** 2.0 · 北极星页（人生面） */
-    function NorthStarTab({ state, show, onOpenSettings }) {
+    function NorthStarTab({ state, show, onOpenSettings, autoStart, onAutoStarted }) {
       const [data, setData] = useState(null)
       const [loading, setLoading] = useState(true)
       const [error, setError] = useState('')
@@ -4789,6 +4969,11 @@ window.__ModuleLoader__.load({
         } catch (err) { setError(err.message) } finally { setLoading(false) }
       }, [])
       useEffect(() => { void load() }, [load])
+      useEffect(() => {
+        if (!autoStart || loading || !data) return
+        if (!data.exists) setWizard(true)
+        onAutoStarted?.()
+      }, [autoStart, loading, data, onAutoStarted])
       const blurred = blurEnabled && !revealed
       const toggleEvidence = (id) => setExpanded((current) => {
         const next = new Set(current)
@@ -4819,12 +5004,18 @@ window.__ModuleLoader__.load({
               h('div', { className: 'wb-card-title' }, '北极星 🔒'),
               h('div', { className: 'wb-spacer' })),
             h('div', { className: 'wb-empty-state' },
-              h('b', null, '以后再写也可以'),
-              h('div', { className: 'wb-small' }, '用几句话写下你不想变成什么样、想往哪去、要成为什么样的人。只存本机，AI 不会代写。'),
-              h('button', { className: 'wb-btn primary sm', onClick: () => setWizard(true) }, '写北极星'))),
+              h('b', null, '给人生定个方向'),
+              h('div', { className: 'wb-small' }, '写几句你想要的未来。只存本机，AI 不代写。'),
+              h('button', { className: 'wb-btn primary sm', onClick: () => setWizard(true) }, '开始写'),
+              h('div', { className: 'wb-hint' }, '4 个小问题，约 3 分钟'))),
           wizard ? h(NorthStarWizard, {
-            data, onClose: () => setWizard(false),
+            data,
+            onClose: (draft) => {
+              if (typeof draft === 'string') setData((current) => (current ? { ...current, draft } : current))
+              setWizard(false)
+            },
             onSaved: async () => { await load() },
+            onDraftCleared: () => setData((current) => (current ? { ...current, draft: '' } : current)),
             show,
           }) : null)
       }
@@ -4845,7 +5036,7 @@ window.__ModuleLoader__.load({
                 h('div', { className: 'wb-ns-label' }, '我拒绝让我的生活变成'),
                 data.antiVision ? h('div', { className: 'wb-ns-text' }, data.antiVision) : h('div', { className: 'wb-hint' }, '（还没写）')),
               h('div', { className: 'wb-ns-section' },
-                h('div', { className: 'wb-ns-label' }, '我正在奔向（一句话愿景，会变）'),
+                h('div', { className: 'wb-ns-label' }, '我想达到的目标（会变）'),
                 data.vision ? h('div', { className: 'wb-ns-text' }, data.vision) : h('div', { className: 'wb-hint' }, '（还没写）')),
               h('div', { className: 'wb-ns-section' },
                 h('div', { className: 'wb-ns-label' }, '我是……的人'),
@@ -4870,40 +5061,123 @@ window.__ModuleLoader__.load({
             h('span', null, '只在本机 · 默认不发给模型 · 不进周报'),
             h('button', { className: 'wb-btn ghost sm', onClick: onOpenSettings }, '设置隐私开关'))),
         wizard ? h(NorthStarWizard, {
-          data, onClose: () => setWizard(false),
+          data,
+          onClose: (draft) => {
+            if (typeof draft === 'string') setData((current) => (current ? { ...current, draft } : current))
+            setWizard(false)
+          },
           onSaved: async () => { await load() },
+          onDraftCleared: () => setData((current) => (current ? { ...current, draft: '' } : current)),
           show,
         }) : null,
         history ? h(NorthStarHistory, { onClose: () => setHistory(false), show }) : null)
     }
 
     /** 2.0 · 北极星四步向导（没有 AI 代写） */
-    function NorthStarWizard({ data, onClose, onSaved, show }) {
-      const steps = ['开始', '反愿景', '一句话愿景', '身份宣言与规则']
-      const [step, setStep] = useState(0)
-      const [fields, setFields] = useState({
+    const NORTH_STAR_STEPS = [
+      {
+        nav: '不想变成',
+        title: '你不想让生活变成什么样？',
+        hint: '想想 5 年后还是现在这样，哪一点你最不想接受。',
+        placeholder: '例：每天被消息追着跑，没有一件自己做完的事。',
+        rows: 5,
+      },
+      {
+        nav: '想达到',
+        title: '你想达到什么目标？',
+        hint: '写一个你真正想要的结果，不用写计划。',
+        placeholder: '例：三年内做出一件自己满意、也有人需要的东西。',
+        rows: 4,
+      },
+      {
+        nav: '成为谁',
+        title: '你想成为什么样的人？',
+        hint: '一行一条，写 1–3 条；用「我是……的人」。',
+        placeholder: '例：我是每周都有交付、说到做到的人。',
+        rows: 4,
+      },
+      {
+        nav: '底线',
+        title: '你不想牺牲什么？',
+        hint: '写你不想为了目标丢掉的东西。',
+        placeholder: '例：不牺牲睡眠；周日不工作。',
+        rows: 3,
+        optional: true,
+      },
+    ]
+
+    function northStarDraftText(fields) {
+      return `反愿景：${fields.antiVision}\n一句话愿景：${fields.vision}\n身份宣言：\n${fields.identityText}\n规则：\n${fields.rulesText}`
+    }
+
+    function hasNorthStarContent(fields) {
+      return ['antiVision', 'vision', 'identityText', 'rulesText'].some((key) => String(fields?.[key] ?? '').trim())
+    }
+
+    function sameNorthStarFields(a, b) {
+      return ['antiVision', 'vision', 'identityText', 'rulesText'].every((key) => String(a?.[key] ?? '') === String(b?.[key] ?? ''))
+    }
+
+    /** 从草稿里恢复上次没写完的四段内容；格式由 northStarDraftText 生成。 */
+    function parseNorthStarDraft(text) {
+      const source = String(text ?? '')
+      if (!source.trim()) return null
+      const read = (label, next) => {
+        const start = source.indexOf(`${label}：`)
+        if (start < 0) return ''
+        const from = start + label.length + 1
+        const to = next ? source.indexOf(`${next}：`, from) : -1
+        return source.slice(from, to < 0 ? undefined : to).trim()
+      }
+      return {
+        antiVision: read('反愿景', '一句话愿景'),
+        vision: read('一句话愿景', '身份宣言'),
+        identityText: read('身份宣言', '规则'),
+        rulesText: read('规则'),
+      }
+    }
+
+    function NorthStarWizard({ data, onClose, onSaved, onDraftCleared, show }) {
+      const baseFields = {
         antiVision: data?.antiVision ?? '',
         vision: data?.vision ?? '',
         identityText: (data?.identity ?? []).map((item) => item.text).join('\n'),
         rulesText: (data?.rules ?? []).join('\n'),
-      })
+      }
+      const draftFields = parseNorthStarDraft(data?.draft)
+      const initialFields = draftFields && hasNorthStarContent(draftFields) && !sameNorthStarFields(draftFields, baseFields)
+        ? draftFields
+        : baseFields
+      const minStep = data?.exists ? 1 : 0
+      const [step, setStep] = useState(minStep)
+      const [fields, setFields] = useState(initialFields)
+      const [restored, setRestored] = useState(() => initialFields !== baseFields)
       const [saveChoice, setSaveChoice] = useState(false)
       const [busy, setBusy] = useState('')
       const [error, setError] = useState('')
+      const fieldsRef = useRef(fields)
+      const baseRef = useRef(baseFields)
+      const didSave = useRef(false)
+      useEffect(() => { fieldsRef.current = fields }, [fields])
       const set = (key, value) => { setFields((current) => ({ ...current, [key]: value })); setError('') }
       const identityList = () => fields.identityText.split('\n').map((line) => line.trim()).filter(Boolean)
       const rulesList = () => fields.rulesText.split('\n').map((line) => line.trim()).filter(Boolean)
+      const hasContent = hasNorthStarContent(fields)
 
-      const saveDraft = async () => {
-        setBusy('draft')
-        try {
-          const text = `反愿景：${fields.antiVision}\n一句话愿景：${fields.vision}\n身份宣言：\n${identityList().join('\n')}\n规则：\n${rulesList().join('\n')}`
-          await request('/northstar/draft', { text })
-          show('草稿已保存')
-        } catch (err) { setError(err.message) } finally { setBusy('') }
+      const closeWizard = () => {
+        const current = fieldsRef.current
+        if (!didSave.current && hasNorthStarContent(current) && !sameNorthStarFields(current, baseRef.current)) {
+          const text = northStarDraftText(current)
+          request('/northstar/draft', { text })
+            .catch((err) => show(`草稿没存上：${err.message}`, 'error'))
+          onClose(text)
+          return
+        }
+        onClose()
       }
       const submit = async (mode) => {
         setBusy('save')
+        setError('')
         try {
           const result = await request('/northstar/save', {
             fields: {
@@ -4914,87 +5188,155 @@ window.__ModuleLoader__.load({
             },
             mode,
           })
+          didSave.current = true
+          await request('/northstar/draft', { text: '' }).catch(() => {})
           await onSaved?.()
           show(`北极星已保存为 v${result.version}`)
           onClose()
         } catch (err) { setError(err.message); setBusy('') }
       }
-      const hasContent = () => Boolean(fields.antiVision.trim() || fields.vision.trim() || identityList().length || rulesList().length)
       const next = () => {
-        if (step < 3) { setStep(step + 1); return }
-        if (!hasContent()) { onClose(); return }
-        if (data?.exists) setSaveChoice(true)
-        else void submit('minor')
+        if (step === 0) { setStep(1); return }
+        if (step < 4) { setError(''); setStep(step + 1); return }
+        if (!hasContent) {
+          didSave.current = true
+          show(data?.exists ? '这次没保存，原来的北极星还在' : '没写也没关系，以后随时可以写')
+          closeWizard()
+          return
+        }
+        if (data?.exists) { setSaveChoice(true); return }
+        void submit('minor')
       }
-      const skip = () => {
-        if (step === 0) { onClose(); return }
-        next()
+      const back = () => {
+        if (busy) return
+        setError('')
+        setSaveChoice(false)
+        setStep(Math.max(step - 1, minStep))
       }
-      const body = step === 0
-        ? h('div', null,
-          h('div', { className: 'wb-ns-intro' },
-            h('p', null, '北极星不是计划，是你想去的方向的几句话。它只存在本机，不会发给模型，也不会进周报。'),
-            h('p', null, '四步都可以跳过，写几个字也行，以后随时可以改。这里没有「AI 帮我写」按钮：这一步只属于你。'),
-            h('div', { className: 'wb-hint' }, '建议 15 分钟；写一半可以点「保存草稿」，下次继续。'),
-            data?.draft ? h('div', { className: 'wb-ns-draft' },
-              h('b', null, '上次草稿：'),
-              h('div', { className: 'wb-small' }, String(data.draft).replace(/\s+/g, ' ').slice(0, 120))) : null))
-        : step === 1
-          ? h(React.Fragment, null,
-            h('div', { className: 'wb-ns-question' }, '如果接下来 5 年什么都不改变，你平常的一天大概是什么样？'),
-            h('div', { className: 'wb-ns-question' }, '其中哪一部分，是你最不愿意接受的？'),
-            h('textarea', {
-              className: 'wb-textarea', rows: 6, autoFocus: true, value: fields.antiVision,
-              placeholder: '我拒绝让我的生活变成……',
-              onChange: (event) => set('antiVision', event.target.value),
-            }))
-          : step === 2
-            ? h(React.Fragment, null,
-              h('div', { className: 'wb-ns-question' }, '如果 3 年后某个普通的日子让你挺满意，那天是什么样？'),
-              h('div', { className: 'wb-ns-question' }, '用一句话写下你正在奔向的方向——它以后会变，先写个第一版。'),
-              h('textarea', {
-                className: 'wb-textarea', rows: 4, autoFocus: true, value: fields.vision,
-                placeholder: '我正在奔向……',
-                onChange: (event) => set('vision', event.target.value),
-              }))
-            : h(React.Fragment, null,
-              h('div', { className: 'wb-ns-question' }, '过上那样的日子，需要你成为什么样的人？用「我是……的人」写 1–3 句。'),
-              h('textarea', {
-                className: 'wb-textarea', rows: 4, autoFocus: true, value: fields.identityText,
-                placeholder: '我是……的人（每行一条）',
-                onChange: (event) => set('identityText', event.target.value),
-              }),
-              h('div', { className: 'wb-ns-question', style: { marginTop: 10 } }, '为了这些，有什么是你不愿意牺牲的？'),
-              h('textarea', {
-                className: 'wb-textarea', rows: 3, value: fields.rulesText,
-                placeholder: '不牺牲睡眠；周日陪家人（每行一条，可留空）',
-                onChange: (event) => set('rulesText', event.target.value),
-              }))
+      const skipStep = () => {
+        if (busy) return
+        setError('')
+        setSaveChoice(false)
+        setStep(Math.min(step + 1, 4))
+      }
+      const discardDraft = () => {
+        setFields(baseRef.current)
+        setRestored(false)
+        setError('')
+        request('/northstar/draft', { text: '' }).catch((err) => show(`草稿没清掉：${err.message}`, 'error'))
+        onDraftCleared?.()
+      }
+      const restoredNote = h('div', { className: 'wb-ns-restored' },
+        '已恢复上次没保存的内容。',
+        h('button', { className: 'wb-ns-link', onClick: discardDraft }, '丢弃'))
 
-      return h(Modal, {
-        title: `写下你的北极星 · 第 ${step + 1}/4 步`,
-        size: 'md',
-        onClose,
-        footer: saveChoice
+      const title = h('span', { className: 'wb-ns-titlebar' },
+        data?.exists ? '改北极星' : '写北极星',
+        h('span', { className: 'wb-ns-local', title: '默认只在本机保存，不发给模型，也不进周报' }, '只存本机 · 不进周报'))
+
+      const stepperFields = ['antiVision', 'vision', 'identityText', 'rulesText']
+      const stepper = h('div', { className: 'wb-ns-steps', role: 'group', 'aria-label': '填写进度' },
+        NORTH_STAR_STEPS.map((item, index) => {
+          const current = step === index + 1
+          const filled = Boolean(String(fields[stepperFields[index]] ?? '').trim())
+          const done = filled && !current
+          return h('button', {
+            key: item.nav,
+            type: 'button',
+            className: `wb-ns-step${current ? ' on' : ''}${done ? ' done' : ''}`,
+            'aria-current': current ? 'step' : undefined,
+            title: `第 ${index + 1} 步：${item.nav}`,
+            disabled: Boolean(busy),
+            onClick: () => {
+              if (busy) return
+              setError('')
+              setSaveChoice(false)
+              setStep(index + 1)
+            },
+          }, h('b', null, done ? '✓' : String(index + 1)), h('span', null, item.nav))
+        }))
+
+      const firstEmpty = [fields.antiVision, fields.vision, fields.identityText, fields.rulesText]
+        .findIndex((value) => !String(value ?? '').trim())
+      const resumeStep = firstEmpty < 0 ? 1 : firstEmpty + 1
+      const contentIndex = Math.max(step - 1, 0)
+      const contentStep = NORTH_STAR_STEPS[contentIndex]
+      const fieldKey = ['antiVision', 'vision', 'identityText', 'rulesText'][contentIndex]
+      const body = step === 0
+        ? h('div', { className: 'wb-ns-cover' },
+          restored ? restoredNote : null,
+          h('h2', { className: 'wb-ns-cover-title' }, '你想要什么样的未来？'),
+          h('p', { className: 'wb-ns-cover-sub' }, '先写一版，不用想清楚。AI 不代写，随时能改。'),
+          h('div', { className: 'wb-ns-chips' },
+            h('span', { className: 'wb-ns-chip' }, '4 个小问题'),
+            h('span', { className: 'wb-ns-chip' }, '约 3 分钟'),
+            h('span', { className: 'wb-ns-chip' }, '每步可跳过'),
+            h('span', { className: 'wb-ns-chip' }, '关掉也不丢')))
+        : saveChoice
+          ? h('div', { className: 'wb-ns-savechoice' },
+            h('div', { className: 'wb-ns-savechoice-title' }, '这次怎么保存？'),
+            h('button', {
+              className: 'wb-ns-saveoption', disabled: Boolean(busy),
+              onClick: () => void submit('minor'),
+            }, h('b', null, '小修改'), h('span', null, '覆盖当前版本，旧内容不保留')),
+            h('button', {
+              className: 'wb-ns-saveoption', disabled: Boolean(busy), autoFocus: true,
+              onClick: () => void submit('version'),
+            }, h('b', null, '存为新版本'), h('span', null, `旧版进历史，存为 v${(data?.version ?? 1) + 1}`)),
+            error ? h('div', { className: 'wb-field-error' }, error) : null,
+            busy === 'save' ? h('div', { className: 'wb-hint' }, '保存中…') : null)
+          : h('div', { className: 'wb-ns-stage' },
+            restored && step === 1 && data?.exists ? restoredNote : null,
+            stepper,
+            h('div', { className: 'wb-ns-title-row' },
+              h('h3', { className: 'wb-ns-question' }, contentStep.title),
+              contentStep.optional ? h('span', { className: 'wb-badge' }, '可选') : null),
+            h('p', { id: 'wb-ns-help', className: 'wb-ns-help' }, contentStep.hint),
+            h('textarea', {
+              key: contentStep.nav,
+              className: 'wb-textarea wb-ns-input',
+              rows: contentStep.rows,
+              autoFocus: true,
+              disabled: Boolean(busy),
+              'aria-label': contentStep.title,
+              'aria-describedby': 'wb-ns-help',
+              value: fields[fieldKey],
+              placeholder: contentStep.placeholder,
+              onChange: (event) => set(fieldKey, event.target.value),
+            }),
+            error ? h('div', { className: 'wb-field-error', style: { marginTop: 8 } }, error) : null)
+
+      const footer = saveChoice
+        ? [h('button', { key: 'back', className: 'wb-btn ghost', disabled: Boolean(busy), onClick: () => setSaveChoice(false) }, '返回修改')]
+        : step === 0
           ? [
-            h('button', { key: 'back', className: 'wb-btn', disabled: Boolean(busy), onClick: () => setSaveChoice(false) }, '返回'),
-            h('button', { key: 'minor', className: 'wb-btn', disabled: Boolean(busy), onClick: () => void submit('minor') }, '小修改（覆盖当前）'),
-            h('button', { key: 'version', className: 'wb-btn primary', disabled: Boolean(busy), onClick: () => void submit('version') }, '存为新版本'),
+            h('button', { key: 'later', className: 'wb-btn ghost', onClick: closeWizard }, '以后再说'),
+            h('div', { key: 'spacer', className: 'wb-spacer' }),
+            h('button', { key: 'start', className: 'wb-btn primary', onClick: () => setStep(restored ? resumeStep : 1) }, restored ? '继续写' : '开始写'),
           ]
           : [
-            h('button', { key: 'prev', className: 'wb-btn', disabled: step === 0 || Boolean(busy), onClick: () => setStep(step - 1) }, '上一步'),
-            h('button', { key: 'skip', className: 'wb-btn ghost', disabled: Boolean(busy), onClick: skip }, step === 0 ? '跳过向导' : '跳过这一步'),
-            h('button', { key: 'draft', className: 'wb-btn ghost', disabled: Boolean(busy), onClick: () => void saveDraft() }, busy === 'draft' ? '保存中…' : '保存草稿'),
+            h('button', {
+              key: 'prev', className: 'wb-btn ghost',
+              disabled: Boolean(busy) || step <= minStep,
+              onClick: back,
+            }, '上一步'),
+            h('div', { key: 'spacer', className: 'wb-spacer' }),
+            step < 4 ? h('button', {
+              key: 'skip', className: 'wb-btn ghost', disabled: Boolean(busy),
+              onClick: skipStep,
+            }, '跳过') : null,
             h('button', {
               key: 'next', className: 'wb-btn primary', disabled: Boolean(busy),
               onClick: next,
-            }, busy === 'save' ? '保存中…' : step === 3 ? '保存' : '下一步'),
-          ],
-      },
-      h('div', { className: 'wb-hint', style: { marginBottom: 8 } }, `${steps[step]} · 这些内容只存在本机，默认不发给模型`),
-      saveChoice ? h('div', { className: 'wb-warnbox', style: { marginBottom: 8 } }, '这次保存要覆盖当前版本，还是保留历史、升一个新版本？') : null,
-      body,
-      error ? h('div', { className: 'wb-field-error', style: { marginTop: 8 } }, error) : null)
+            }, busy === 'save' ? '保存中…' : step === 4 ? (hasContent ? '保存' : '完成') : '下一步'),
+          ]
+
+      return h(Modal, {
+        title,
+        size: 'md',
+        onClose: closeWizard,
+        footer,
+      }, body)
     }
 
     /** 2.0 · 北极星历史（只读 + 简单逐行对比） */
@@ -7931,10 +8273,10 @@ window.__ModuleLoader__.load({
           : (!guideDismissed
             ? h('div', { className: 'wb-ns-guide' },
               h('div', { className: 'wb-ns-guide-text' },
-                h('b', null, '给目标找个方向'),
-                h('div', { className: 'wb-hint' }, '约 15 分钟，可跳过。写下北极星后，目标和杠杆会更有方向。')),
+                h('b', null, '给目标一个方向'),
+                h('div', { className: 'wb-hint' }, '约 3 分钟。写完后，目标和杠杆会更有方向。')),
               h('div', { className: 'wb-spacer' }),
-              h('button', { className: 'wb-btn sm ai', onClick: onOpenNorthStar }, '去写北极星'),
+              h('button', { className: 'wb-btn primary sm', onClick: onOpenNorthStar }, '写北极星'),
               h('button', {
                 className: 'wb-btn sm ghost',
                 onClick: () => {
@@ -8400,6 +8742,7 @@ window.__ModuleLoader__.load({
       const [metrics, setMetrics] = useState(null)
       const [holidayInfo, setHolidayInfo] = useState(null)
       const [holidayBusy, setHolidayBusy] = useState('')
+      const [notifPermission, setNotifPermission] = useState(() => notificationPermission())
       const [nowTick, setNowTick] = useState(() => new Date())
       useEffect(() => {
         const timer = setInterval(() => setNowTick(new Date()), 1000)
@@ -8520,11 +8863,58 @@ window.__ModuleLoader__.load({
             onChange: (event) => set(key, `${hh}:${event.target.value}`),
           }, Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0')).map((value) => h('option', { key: value, value }, value))))
       }
+      const askNotification = async () => {
+        if (notificationPermission() === 'unsupported') { show('当前环境不支持系统通知', 'error'); return }
+        try {
+          const result = await globalThis.Notification.requestPermission()
+          setNotifPermission(result)
+          if (result === 'granted') show('系统通知已开启')
+          else if (result === 'denied') show('系统通知被拒绝，可在 macOS「系统设置 → 通知 → DeepSeek Harness」里允许', 'error')
+          else show('还没有允许系统通知')
+        } catch (error) { show(error.message, 'error') }
+      }
+      const sendTestNotice = () => {
+        if (!canUseNotification()) { show('先允许系统通知，再试一次', 'error'); return }
+        show('3 秒后发测试通知，请切到别的 App 再点它')
+        setTimeout(() => {
+          const notice = {
+            id: `test-${Date.now()}`,
+            kind: 'test',
+            title: '知行 · 测试通知',
+            body: '点这条通知，应该直接回到知行的「今日」页。',
+          }
+          const native = showSystemNotice(notice, () => {
+            request('/focus', {}).catch(() => {})
+            try { window.focus() } catch { /* 忽略 */ }
+            try { window.dispatchEvent(new CustomEvent('zhixing:open')) } catch { /* 忽略 */ }
+            setTimeout(() => {
+              try { window.dispatchEvent(new CustomEvent('zhixing:goto', { detail: { tab: 'today' } })) } catch { /* 忽略 */ }
+            }, 80)
+          })
+          if (!native) show('系统通知没发出去，请检查 macOS 通知权限', 'error')
+        }, 3000)
+      }
       const theme = ['host', 'light', 'dark', 'time'].includes(form.themeMode) ? form.themeMode : 'host'
+      const notificationHint = notifPermission === 'granted'
+        ? '已开启'
+        : notifPermission === 'denied'
+          ? '已被系统拒绝'
+          : notifPermission === 'unsupported'
+            ? '当前环境不支持'
+            : '未开启'
       const settingsGroups = [
-        { id: 'daily', label: '日常', hint: '提醒 · 地区 · 节假日', items: [section('提醒', '到点会在 DSH 里弹出提醒，并生成当天的 AI 建议。',
+        { id: 'daily', label: '日常', hint: '提醒 · 地区 · 节假日', items: [section('提醒', '到点会在 DSH 里弹出提醒；窗口在后台时用系统通知，点一下直接回到知行。',
             srow('早安提醒', '提醒你看今天的待办', hm('morningTime', '早安提醒')),
             srow('晚报提醒', '提醒你写日报，AI 会提前整理好草稿', hm('eveningTime', '晚报提醒')),
+            srow('系统通知', '窗口切到后台或最小化时，用系统通知提醒你，不会再以「脚本编辑器」的名义弹窗',
+              h('div', { className: 'wb-row', style: { gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' } },
+                h('span', { className: 'wb-small wb-muted' }, notificationHint),
+                notifPermission === 'default'
+                  ? h('button', { className: 'wb-btn sm', onClick: askNotification }, '允许通知')
+                  : null,
+                h('button', {
+                  className: 'wb-btn sm', onClick: sendTestNotice, disabled: notifPermission !== 'granted',
+                }, '发测试通知'))),
             srow('跳过周末', '周六、周日不发提醒（调休上班日除外）',
               h(Switch, { checked: form.skipWeekends !== false, label: '跳过周末', onChange: (value) => set('skipWeekends', value) })),
             srow('目标停滞提醒天数', '目标连续几天没有进展就提醒',
@@ -8645,8 +9035,8 @@ window.__ModuleLoader__.load({
             h('details', { className: 'wb-adv' },
               h('summary', null, '调试'),
               h('div', { className: 'wb-hint', style: { marginBottom: 6 } }, '不改系统时间，结果记录到 log.md 并标 [测试]。'),
-              srow('模拟 9:00 提醒', '马上触发一次早安提醒，看看效果', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/morning', { channel: 'auto' }); await refresh(); show(`早安提醒：${r.channel}，${r.count ?? 0} 项`) } catch (e) { show(e.message, 'error') } } }, '执行')),
-              srow('模拟 18:00 提醒', '马上触发一次晚报提醒', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/evening', { channel: 'auto' }); await refresh(); show(r.skipped ? `晚报：${r.skipped}` : `晚报提醒：${r.channel}`) } catch (e) { show(e.message, 'error') } } }, '执行')),
+              srow('模拟 9:00 提醒', '马上触发一次早安提醒，看看效果', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/morning', { channel: 'auto' }); await refresh(); show(`早安提醒：已放进提醒队列，${r.count ?? 0} 项`) } catch (e) { show(e.message, 'error') } } }, '执行')),
+              srow('模拟 18:00 提醒', '马上触发一次晚报提醒', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/evening', { channel: 'auto' }); await refresh(); show(r.skipped ? `晚报：${r.skipped}` : '晚报提醒：已放进提醒队列') } catch (e) { show(e.message, 'error') } } }, '执行')),
               srow('检查目标提醒', '检查有没有停滞或有风险的目标', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/goal-check', { force: true, channel: 'auto' }); await refresh(); show(`目标检查：${(r.alerts ?? []).length} 条提醒`) } catch (e) { show(e.message, 'error') } } }, '执行')),
               srow('立即检查', '马上跑一遍所有提醒规则', h('button', { className: 'wb-btn sm', onClick: async () => { try { const r = await request('/debug/tick', { force: true }); await refresh(); show(`tick：${JSON.stringify(r).slice(0, 120)}`) } catch (e) { show(e.message, 'error') } } }, '执行')))) : null] }] : []),
       ]
@@ -8674,7 +9064,8 @@ window.__ModuleLoader__.load({
     }
 
     function WorkBuddyPanel() {
-      const [tab, setTab] = useState('today')
+      const [tab, setTab] = useState(pendingTab || 'today')
+      const [northStarStart, setNorthStarStart] = useState(false)
       const [state, setState] = useState(null)
       const [suggestions, setSuggestions] = useState([])
       const [error, setError] = useState('')
@@ -8684,9 +9075,22 @@ window.__ModuleLoader__.load({
       const snoozeRef = useRef(null)
 
       useEffect(() => {
-        const onNotice = (event) => setNotice(event?.detail ?? null)
+        const onNotice = (event) => {
+          pendingNotice = null
+          setNotice(event?.detail ?? null)
+        }
         window.addEventListener('zhixing:notice', onNotice)
         return () => window.removeEventListener('zhixing:notice', onNotice)
+      }, [])
+      useEffect(() => {
+        if (!pendingNotice) return
+        setNotice(pendingNotice)
+        pendingNotice = null
+      }, [])
+      useEffect(() => {
+        if (!pendingTab) return
+        setTab(pendingTab)
+        pendingTab = null
       }, [])
 
       const clearSnooze = useCallback((clearStorage = true) => {
@@ -8761,7 +9165,12 @@ window.__ModuleLoader__.load({
 
       useEffect(() => {
         const timer = setInterval(() => { void refresh(); void loadSuggestions() }, 30_000)
-        const goto = (event) => { const next = event?.detail?.tab; if (next) setTab(next) }
+        const goto = (event) => {
+          const next = event?.detail?.tab
+          if (!next) return
+          pendingTab = null
+          setTab(next)
+        }
         window.addEventListener('zhixing:goto', goto)
         return () => { clearInterval(timer); window.removeEventListener('zhixing:goto', goto) }
       }, [refresh, loadSuggestions])
@@ -8788,45 +9197,6 @@ window.__ModuleLoader__.load({
         } catch (e) { show(e.message, 'error') }
       }
 
-      useEffect(() => {
-        let alive = true
-        const beat = async () => {
-          try {
-            const data = await request('/heartbeat', {
-              visible: typeof document === 'undefined' ? true : document.visibilityState === 'visible',
-              tab,
-            })
-            if (!alive) return
-            const notices = data.notices ?? []
-            if (notices.length) {
-              for (const notice of notices) {
-                try {
-                  if (typeof Notification !== 'undefined') {
-                    if (Notification.permission === 'default') Notification.requestPermission().catch(() => {})
-                    if (Notification.permission === 'granted') {
-                      const native = new Notification(notice.title, { body: notice.body, tag: notice.id })
-                      native.onclick = () => {
-                        window.focus()
-                        window.dispatchEvent(new CustomEvent('zhixing:goto', { detail: { tab: 'today' } }))
-                        window.dispatchEvent(new CustomEvent('zhixing:notice', { detail: { kind: notice.kind, title: notice.title, body: notice.body } }))
-                        native.close()
-                      }
-                    }
-                  }
-                } catch { /* 通知不可用就只留页面提示 */ }
-                show(`${notice.title}：${notice.body}`)
-                // 晚报提醒要直接变成可操作的卡片（不依赖用户点系统通知）。
-                if (notice.kind === 'evening') setNotice({ kind: notice.kind, title: notice.title, body: notice.body })
-              }
-              await request('/notice-ack', { ids: notices.map((notice) => notice.id) })
-              await refresh()
-            }
-          } catch { /* 心跳失败不影响页面 */ }
-        }
-        void beat()
-        const timer = setInterval(() => { void beat() }, 20_000)
-        return () => { alive = false; clearInterval(timer) }
-      }, [tab, refresh, show])
 
       const theme = useTheme(state?.settings)
       const palette = theme === 'dark' ? WB_DARK_VARS : WB_LIGHT_VARS
@@ -8881,10 +9251,14 @@ window.__ModuleLoader__.load({
             : tab === 'goals' ? h(GoalsTab, {
               refreshState: refresh, show, suggestions, ai: state.ai, settings: state.settings,
               onApplySuggestion: applySuggestion, onDismissSuggestion: dismissSuggestion,
-              onOpenNorthStar: () => setTab('northstar'),
+              onOpenNorthStar: () => { setNorthStarStart(true); setTab('northstar') },
             })
             : tab === 'drift' ? h(DriftTab, { state, show, ai: state.ai })
-            : tab === 'northstar' ? h(NorthStarTab, { state, show, onOpenSettings: () => setTab('settings') })
+            : tab === 'northstar' ? h(NorthStarTab, {
+              state, show, autoStart: northStarStart,
+              onAutoStarted: () => setNorthStarStart(false),
+              onOpenSettings: () => setTab('settings'),
+            })
             : h(SettingsTab, { state, refresh, show, ai: state.ai }),
         ),
       )
@@ -8899,7 +9273,7 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots'],
+      inject: ['slots', 'layout'],
       apply(ctx) {
         try {
           window.addEventListener('error', (event) => reportClientError(event.error ?? event.message))
@@ -8911,6 +9285,11 @@ window.__ModuleLoader__.load({
         ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
           name: 'sidebar.panellist', id: PANEL_ID, order: 35, label: '知行',
         }, SidebarIcon)), 'zhixing: sidebar')
+        ctx.effect(() => ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+          name: 'shell.overlay', id: 'zhixing.reminders', order: 84,
+        }, () => h(GlobalReminderLayer, {
+          onOpen: () => { try { ctx.layout?.selectPanel?.(PANEL_ID) } catch { /* 忽略 */ } },
+        }))), 'zhixing: reminder overlay')
         ctx.effect(() => ctx.slots.inject('shell.overlay', () => ctx.slots.register({
           name: 'shell.overlay', id: 'zhixing.quick-todo', order: 85,
         }, QuickTodoLayer)), 'zhixing: selection layer')
