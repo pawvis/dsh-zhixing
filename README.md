@@ -102,14 +102,14 @@ The Today banner also has two offline features: **今天吃什么** (a time-awar
 
 1. Install DeepSeek Harness Desktop 0.2.x and make sure plugins are enabled.
 2. Install the plugin:
-   - **release zip (recommended):** download `dsh-zhixing-2.0.2.zip` from [Releases](https://github.com/pawvis/dsh-zhixing/releases), extract it, and select the extracted folder in **Plugins → Add plugin**.
+   - **release zip (recommended):** download `dsh-zhixing-2.0.3.zip` from [Releases](https://github.com/pawvis/dsh-zhixing/releases), extract it, and select the extracted folder in **Plugins → Add plugin**.
    - **from source:** clone `https://github.com/pawvis/dsh-zhixing.git` and select the cloned folder in **Plugins → Add plugin**.
    - **npm:** `dsh plugin --profile desktop add dsh-zhixing` also works, but the registry is still at `1.0.2`.
 3. Restart DSH and open **知行** in the sidebar.
 4. Open **设置** to set reminders, region and clock. If you want AI, make sure a DSH model is configured; the model picker in the plugin header controls which one the plugin uses.
 5. Try the loop: open a day's report, click **生成日报草稿**, edit, save; then open **目标** and use **文字/文件 AI 拆解** on a plan.
 
-> The npm registry still has `1.0.2`; `v2.0.2` is available from the GitHub release / offline zip until it is published to npm. The plugin works without AI; the AI features simply stay unavailable.
+> The npm registry still has `1.0.2`; `v2.0.3` is available from the GitHub release / offline zip until it is published to npm. The plugin works without AI; the AI features simply stay unavailable.
 
 ## Privacy & data
 

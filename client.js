@@ -3,7 +3,7 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react')
     const h = React.createElement
-    const { useCallback, useEffect, useMemo, useRef, useState } = React
+    const { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } = React
 
     const API = '/api/zhixing'
     // 后端只有在 ZHIXING_DEBUG=1 时才注册 /debug/*；前端按同一个开关隐藏入口。
@@ -1319,7 +1319,7 @@ window.__ModuleLoader__.load({
       .wb-today-narrow .wb-todo-card{overflow:visible;flex:none}
       .wb-today-narrow .wb-todo-body{overflow:visible}
       .wb-today > .wb-card{min-height:0;overflow:auto}
-      .wb-today > .wb-col{display:flex;flex-direction:column;gap:14px;min-height:0;overflow:auto}
+      .wb-today > .wb-col{display:flex;flex-direction:column;gap:14px;min-height:0;min-width:0;overflow:auto}
       @media(max-width:1080px){.wb-today{grid-template-columns:minmax(0,1fr);overflow:auto}.wb-today > .wb-card{overflow:visible}}
       .wb-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:16px}
       @media (max-width:1080px){.wb-grid{grid-template-columns:minmax(0,1fr)}}
@@ -1448,7 +1448,9 @@ window.__ModuleLoader__.load({
       .wb-cycle-title{font-size:12px;color:var(--wb-muted);margin:6px 0 8px}
       .wb-rel{position:relative}
       .wb-model-btn{display:flex;align-items:center;gap:6px;border:1px solid var(--wb-border);background:var(--wb-card);color:var(--wb-text);font:inherit;font-size:12px;padding:4px 10px;border-radius:9px;cursor:pointer;max-width:min(360px,44vw)}
-      .wb-model-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .wb-model-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+      .wb-model-btn > i{flex:0 0 auto}
+      .wb-model-btn span:last-child{flex:0 0 auto}
       .wb-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;flex:0 0 auto}
       .wb-dot.bad{background:#ef4444}
       .wb-pop{position:absolute;right:0;top:calc(100% + 6px);width:340px;max-width:86vw;background:var(--wb-card);border:1px solid var(--wb-border);border-radius:12px;box-shadow:var(--wb-shadow);z-index:40;padding:8px;display:flex;flex-direction:column;gap:6px}
@@ -2100,6 +2102,38 @@ window.__ModuleLoader__.load({
         .wb-lucky-tube.shake,.wb-lucky-item.final.hit,.wb-lucky-card,.wb-lucky-spark i,.wb-lucky-fade,.wb-lucky-tarot.flip .wb-lucky-tcard{animation:none!important}
         .wb-lucky-stick{transition:none}
       }
+      /* 面板宽度断点：DSH 可以把插件放在窄栏里，窗口很宽时 @media 不会触发，这里按面板宽度再兜一层。 */
+      .wb-root.wb-w-1100 .wb-lucky-actions{flex-basis:100%;justify-content:flex-end;margin-left:0}
+      .wb-root.wb-w-1080 .wb-grid{grid-template-columns:minmax(0,1fr)}
+      .wb-root.wb-w-1080 .wb-okr-grid{grid-template-columns:minmax(0,1fr)}
+      .wb-root.wb-w-900 .wb-reports{grid-template-columns:minmax(0,1fr)}
+      .wb-root.wb-w-900 .wb-reports2{grid-template-columns:minmax(0,1fr)!important}
+      .wb-root.wb-w-900 .wb-reports2 > .wb-split{display:none}
+      .wb-root.wb-w-900 .wb-settings-grid{grid-template-columns:minmax(0,1fr)}
+      .wb-root.wb-w-860 .wb-sum-edit{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,.65fr)}
+      .wb-root.wb-w-860 .wb-edit-split{grid-template-columns:minmax(0,1fr)}
+      .wb-root.wb-w-860 .wb-head > .wb-small{white-space:nowrap}
+      .wb-root.wb-w-860 .wb-model-btn{max-width:min(240px,40vw)}
+      .wb-root.wb-w-820 .wb-settings-shell{grid-template-columns:minmax(0,1fr);gap:10px}
+      .wb-root.wb-w-760 .wb-sum-pbody{grid-template-columns:1fr}
+      .wb-root.wb-w-760 .wb-sum-presets{flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--wb-border)}
+      .wb-root.wb-w-760 .wb-sum-presets h4{display:none}
+      .wb-root.wb-w-760 .wb-sum-months{grid-template-columns:1fr}
+      .wb-root.wb-w-760 .wb-sum-mon + .wb-sum-mon{display:none}
+      .wb-root.wb-w-760 .wb-summary-card > .wb-row.end{flex-direction:column;align-items:stretch}
+      .wb-root.wb-w-760 .wb-sum-btns{justify-content:flex-end}
+      .wb-root.wb-w-760 .wb-sum-len{display:none}
+      .wb-root.wb-w-700 .wb-head{gap:8px;padding:10px 14px}
+      .wb-root.wb-w-700 .wb-tabs{margin-left:4px;gap:2px;padding:2px}
+      .wb-root.wb-w-700 .wb-tab{padding:4px 7px;font-size:12px}
+      .wb-root.wb-w-700 .wb-head > .wb-small{white-space:nowrap;font-size:11px}
+      .wb-root.wb-w-700 .wb-model-btn{max-width:min(260px,38vw)}
+      .wb-root.wb-w-700 .wb-banner-quote{flex-basis:100%;white-space:normal;font-size:14px;line-height:1.55}
+      .wb-root.wb-w-700 .wb-body{padding:14px}
+      .wb-root.wb-w-420 .wb-ns-steps{gap:2px}
+      .wb-root.wb-w-420 .wb-ns-step{padding:0 2px}
+      .wb-root.wb-w-420 .wb-ns-step span{font-size:10px;letter-spacing:-.02em}
+      .wb-root.wb-w-420 .wb-body{padding:10px}
     `
 
     function reportClientError(error, info) {
@@ -4657,21 +4691,25 @@ window.__ModuleLoader__.load({
           tab === 'sign' ? signBody : tab === 'tarot' ? tarotBody : starBody,
           h('div', { className: 'wb-lucky-foot' }, footer)))
     }
-    function TodayTab({ state, refresh, show, suggestions, onApplySuggestion, onDismissSuggestion, notice, onCloseNotice, onSnoozeNotice }) {
-      const [leftWidth, setLeftWidth] = useState(() => {
-        const saved = Number(window.localStorage?.getItem('wb.today.leftWidth'))
-        return Number.isFinite(saved) && saved >= 320 ? saved : 560
+    function TodayTab({ state, refresh, show, suggestions, onApplySuggestion, onDismissSuggestion, notice, onCloseNotice, onSnoozeNotice, panelWidth = 0 }) {
+      const SPLIT_GAP = 8
+      const MAIN_MIN = 360
+      const RAIL_MIN = 340
+      const RAIL_MAX = 520
+      // 右栏（AI 助手 / 日历）用可调宽度，主栏吃掉剩余空间：宽屏时待办不会被挤，右栏也不会被压成一条。
+      const [railWidth, setRailWidth] = useState(() => {
+        const saved = Number(window.localStorage?.getItem('wb.today.railWidth'))
+        return Number.isFinite(saved) ? Math.min(RAIL_MAX, Math.max(RAIL_MIN, saved)) : 380
       })
       const [overdueSignal, setOverdueSignal] = useState(0)
       const [reportEditor, setReportEditor] = useState(null)
-      const [narrow, setNarrow] = useState(() => (typeof window === 'undefined' ? false : window.innerWidth < 1080))
-      const widthRef = useRef(leftWidth)
-      useEffect(() => { widthRef.current = leftWidth }, [leftWidth])
-      useEffect(() => {
-        const onResize = () => setNarrow(window.innerWidth < 1080)
-        window.addEventListener('resize', onResize)
-        return () => window.removeEventListener('resize', onResize)
-      }, [])
+      // 按面板宽度而不是 window.innerWidth 判断：DSH 可以在窄栏里显示插件。
+      const available = Math.max(MAIN_MIN + SPLIT_GAP + RAIL_MIN,
+        (panelWidth || (typeof window === 'undefined' ? 1280 : window.innerWidth)) - 40)
+      const narrow = available < 900
+      const effectiveRail = Math.min(Math.max(RAIL_MIN, railWidth), Math.max(RAIL_MIN, Math.min(RAIL_MAX, available - SPLIT_GAP - MAIN_MIN)))
+      const widthRef = useRef(effectiveRail)
+      useEffect(() => { widthRef.current = effectiveRail }, [effectiveRail])
       useEffect(() => {
         if (!overdueSignal) return
         document.getElementById('wb-overdue-group')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
@@ -4680,15 +4718,17 @@ window.__ModuleLoader__.load({
         event.preventDefault()
         const startX = event.clientX
         const startWidth = widthRef.current
+        const railMax = Math.max(RAIL_MIN, Math.min(RAIL_MAX, available - SPLIT_GAP - MAIN_MIN))
         let frame = 0
         let latest = startWidth
         document.body.classList.add('wb-dragging')
         const onMove = (moveEvent) => {
-          latest = Math.max(320, Math.min(window.innerWidth - 420, startWidth + moveEvent.clientX - startX))
+          // 分隔条向右拖 = 主栏变宽、右栏变窄。
+          latest = Math.max(RAIL_MIN, Math.min(railMax, startWidth - (moveEvent.clientX - startX)))
           if (!frame) frame = requestAnimationFrame(() => {
             frame = 0
-            setLeftWidth(latest)
-            try { window.localStorage?.setItem('wb.today.leftWidth', String(latest)) } catch { /* 忽略 */ }
+            setRailWidth(latest)
+            try { window.localStorage?.setItem('wb.today.railWidth', String(latest)) } catch { /* 忽略 */ }
           })
         }
         const onUp = () => {
@@ -4711,7 +4751,7 @@ window.__ModuleLoader__.load({
         h(DailyBanner, { settings: state.settings, show, timezone: state.timezone }),
         h(V2LeverCard, { levers: state.levers, refresh, show, ai: state.ai, animate: state.settings?.leverAnimation !== false }),
         h(Suggestions, { items: suggestions, onApply: onApplySuggestion, onDismiss: onDismissSuggestion }),
-        h('div', { className: `wb-today${narrow ? ' wb-today-narrow' : ''}`, style: narrow ? undefined : { gridTemplateColumns: `${leftWidth}px 8px minmax(0,1fr)` } },
+        h('div', { className: `wb-today${narrow ? ' wb-today-narrow' : ''}`, style: narrow ? undefined : { gridTemplateColumns: `minmax(${MAIN_MIN}px, 1fr) ${SPLIT_GAP}px ${effectiveRail}px` } },
           h('div', { className: 'wb-col' }, h(TodoBoard, { state, refresh, show, ai: state.ai })),
           narrow ? null : h('div', { className: 'wb-split', title: '拖动调整宽度', onMouseDown: startDrag }),
           h('div', { className: 'wb-col' },
@@ -9064,6 +9104,28 @@ window.__ModuleLoader__.load({
     }
 
     function WorkBuddyPanel() {
+      const rootRef = useRef(null)
+      const [panelWidth, setPanelWidth] = useState(() => (typeof window === 'undefined' ? 1280 : window.innerWidth))
+      // 插件可能被 DSH 放在窄栏里：按实际面板宽度切换断点，而不是窗口宽度。
+      useLayoutEffect(() => {
+        const node = rootRef.current
+        if (!node) return undefined
+        const measure = () => {
+          const width = node.clientWidth || 0
+          if (width > 0) setPanelWidth((current) => (Math.abs(current - width) < 1 ? current : width))
+        }
+        measure()
+        if (typeof ResizeObserver === 'undefined') {
+          window.addEventListener('resize', measure)
+          return () => window.removeEventListener('resize', measure)
+        }
+        const observer = new ResizeObserver(measure)
+        observer.observe(node)
+        return () => observer.disconnect()
+      }, [])
+      const panelClass = ['wb-w-1100', 'wb-w-1080', 'wb-w-900', 'wb-w-860', 'wb-w-820', 'wb-w-760', 'wb-w-700', 'wb-w-420']
+        .filter((name) => panelWidth < Number(name.slice(5)))
+        .join(' ')
       const [tab, setTab] = useState(pendingTab || 'today')
       const [northStarStart, setNorthStarStart] = useState(false)
       const [state, setState] = useState(null)
@@ -9200,7 +9262,7 @@ window.__ModuleLoader__.load({
 
       const theme = useTheme(state?.settings)
       const palette = theme === 'dark' ? WB_DARK_VARS : WB_LIGHT_VARS
-      return h('div', { className: 'wb-root', 'data-wb-theme': theme, style: { ...palette } },
+      return h('div', { ref: rootRef, className: `wb-root${panelClass ? ` ${panelClass}` : ''}`, 'data-wb-theme': theme, style: { ...palette } },
         h(WbStyles),
         h('div', { className: 'wb-head' },
           h('div', { className: 'wb-title' }, '知行'),
@@ -9245,7 +9307,7 @@ window.__ModuleLoader__.load({
               : h('div', { className: 'wb-card' }, h(Skeleton, { rows: 5 })))
             : tab === 'today' ? h(TodayTab, {
               state, refresh, show, suggestions, onApplySuggestion: applySuggestion, onDismissSuggestion: dismissSuggestion,
-              notice, onCloseNotice: () => setNotice(null), onSnoozeNotice: snoozeNotice,
+              notice, onCloseNotice: () => setNotice(null), onSnoozeNotice: snoozeNotice, panelWidth,
             })
             : tab === 'reports' ? h(ReportsTab, { state, show })
             : tab === 'goals' ? h(GoalsTab, {
