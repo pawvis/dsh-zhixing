@@ -2667,14 +2667,22 @@ window.__ModuleLoader__.load({
 .wb-gnotice-btn:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.10))}
 .wb-gnotice-btn.primary{background:var(--dsw-alias-brand-primary,#2563EB);border-color:var(--dsw-alias-brand-primary,#2563EB);color:#fff}
 .wb-gnotice-btn.primary:hover{filter:brightness(.96)}
+.wb-gnotice-btn.ghost{color:var(--dsw-alias-label-secondary,#4B5563);border-color:transparent}
+.wb-gnotice-btn.ghost:hover{color:var(--dsw-alias-label-primary,#111827)}
+.wb-gnotice-hint{flex:1;align-self:center;font-size:11px;color:var(--dsw-alias-label-tertiary,#6B7280)}
 @media(max-width:600px){.wb-gnotice{top:auto;bottom:20px;right:12px;left:12px;width:auto}}
 `
+
+    // 积压提醒太多时，逐条点「知道了」会很烦躁：连点这么多次后，给一个「忽略全部」的出口。
+    const REMINDER_IGNORE_ALL_AFTER = 3
 
     /** DSH 全局提醒：窗口在前台弹右上角提醒卡；在后台则发系统通知，点一下回到知行。 */
     function GlobalReminderLayer({ onOpen }) {
       const [queue, setQueue] = useState([])
+      const [ignoreAllReady, setIgnoreAllReady] = useState(false)
+      const ackedRef = useRef(0)
       const seenRef = useRef(new Set())
-      const nativeRef = useRef(new Set())
+      const nativeRef = useRef(new Map())
       const onOpenRef = useRef(onOpen)
       onOpenRef.current = onOpen
 
@@ -2697,16 +2705,52 @@ window.__ModuleLoader__.load({
         setQueue((items) => items.filter((item) => item.id !== notice.id))
         request('/notice-ack', { ids: [notice.id] }).catch(() => {})
         if (open) openPanel(notice, noticeTab(notice.kind))
+        else {
+          // 只统计「知道了」：连着关掉多条还没清空，说明是积压，不是单条提醒。
+          ackedRef.current += 1
+          if (ackedRef.current >= REMINDER_IGNORE_ALL_AFTER) setIgnoreAllReady(true)
+        }
       }, [openPanel])
+
+      // 全部忽略：清空当前队列和服务端待显示提醒，顺手关掉后台已经弹过的系统通知。
+      const ignoreAll = useCallback(async () => {
+        const queued = queue.map((notice) => notice.id)
+        queued.forEach((id) => seenRef.current.add(id))
+        nativeRef.current.forEach((native) => {
+          try { native?.close?.() } catch { /* 忽略 */ }
+        })
+        nativeRef.current.clear()
+        ackedRef.current = 0
+        setIgnoreAllReady(false)
+        setQueue([])
+        // 心跳间隙服务端可能还有页面还没取到的提醒：先取一次最新队列，把 id 一并确认掉，
+        // 再带 all 兜底（旧版 Host 不认识 all 时，靠 ids 也能清干净）。
+        let ids = queued
+        try {
+          const visible = typeof document === 'undefined' ? true : document.visibilityState === 'visible'
+          const data = await request('/heartbeat', { visible, tab: 'global' })
+          const latest = (data.notices ?? []).map((notice) => notice.id)
+          latest.forEach((id) => seenRef.current.add(id))
+          ids = [...new Set([...queued, ...latest])]
+        } catch { /* 取不到就按已知 ids 清 */ }
+        request('/notice-ack', { all: true, ids }).catch(() => {})
+      }, [queue])
+
+      // 队列清空后重置计数：下一次零散提醒不该再冒出「忽略全部」。
+      useEffect(() => {
+        if (queue.length) return
+        ackedRef.current = 0
+        setIgnoreAllReady(false)
+      }, [queue.length])
 
       const notifyNative = useCallback((notice) => {
         if (!notice || nativeRef.current.has(notice.id)) return
-        nativeRef.current.add(notice.id)
-        showSystemNotice(notice, (target) => {
+        const native = showSystemNotice(notice, (target) => {
           // 让 DSH 回到前台（最小化也能还原），再切到对应页签。
           request('/focus', {}).catch(() => {})
           finish(target, true)
         })
+        nativeRef.current.set(notice.id, native)
       }, [finish])
 
       useEffect(() => {
@@ -2749,6 +2793,11 @@ window.__ModuleLoader__.load({
           h('div', { className: 'wb-gnotice-title' }, current.title || '知行提醒'),
           h('div', { className: 'wb-gnotice-body' }, current.body || ''),
           h('div', { className: 'wb-gnotice-actions' },
+            ignoreAllReady ? h('span', { className: 'wb-gnotice-hint' }, `还有 ${queue.length} 条`) : null,
+            ignoreAllReady ? h('button', {
+              type: 'button', className: 'wb-gnotice-btn ghost', title: `忽略剩下的 ${queue.length} 条提醒`,
+              onClick: ignoreAll,
+            }, '忽略全部') : null,
             h('button', { type: 'button', className: 'wb-gnotice-btn', onClick: () => finish(current, false) }, '知道了'),
             h('button', { type: 'button', className: 'wb-gnotice-btn primary', onClick: () => finish(current, true) }, targetLabel))))
     }
