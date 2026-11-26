@@ -140,6 +140,10 @@ test('专注：每条记录字段与类型完整（2-7）', async (t) => {
   await setTop(store, DAY, 't1')
 
   await start(store, { plannedMinutes: 45, todoId: 't1' }, T0)
+  const live = await getState(store, T0)
+  assert.equal(live.running.todoId, 't1')
+  assert.equal(live.running.goalId, 'g1')
+  assert.equal(live.running.isTop, true)
   const record = await stop(store, new Date(T0.getTime() + 20 * MIN))
 
   assert.equal(typeof record.id, 'string')
@@ -223,6 +227,10 @@ test('专注：剩余秒数按服务端 start 计算，刷新/晚开都不漂（
   assert.equal(state.running.start, T0.toISOString())
   assert.equal(state.remainingSec, 50 * 60)
   assert.equal(state.todayMinutes, 0)
+
+  // 刷新后（晚 1 秒再取）剩余秒数按服务端 start 继续算，不是从 60 分钟重新开始。
+  const refreshed = await getState(store, new Date(T0.getTime() + 10 * MIN + 1000))
+  assert.equal(refreshed.remainingSec, 50 * 60 - 1)
 })
 
 test('专注：计划时长非法或 todoId 不是当天重点都返回 400（2-2 补充）', async (t) => {

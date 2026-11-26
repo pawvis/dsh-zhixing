@@ -233,6 +233,7 @@ test('专注路由：GET /focus、start / stop 的 409、旧 POST /focus 回归�
   const again = await call(handler, { method: 'POST', url: '/api/zhixing/focus/start', body: { plannedMinutes: 60 } })
   assert.equal(again.status, 409)
   assert.equal(JSON.parse(again.payload).error, 'focus_running')
+  assert.equal(JSON.parse(again.payload).message, '已有专注进行中，先结束当前这个')
   assert.equal(JSON.parse((await call(handler, { url: '/api/zhixing/focus' })).payload).running.id, running.id)
 
   const stopped = await call(handler, { method: 'POST', url: '/api/zhixing/focus/stop', body: {} })
@@ -243,6 +244,7 @@ test('专注路由：GET /focus、start / stop 的 409、旧 POST /focus 回归�
   const idle = await call(handler, { method: 'POST', url: '/api/zhixing/focus/stop', body: {} })
   assert.equal(idle.status, 409)
   assert.equal(JSON.parse(idle.payload).error, 'focus_idle')
+  assert.equal(JSON.parse(idle.payload).message, '现在没有进行中的专注')
 
   // 旧的 POST /focus（聚焦 DSH 窗口）仍由旧分支响应；把 platform 改成 linux 避免真的 open dsh://
   const originalPlatform = process.platform
