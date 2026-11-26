@@ -198,7 +198,7 @@ test('待办「变为」完成时给当天重点计数，反复切换只计 1 �
 })
 
 test('专注路由：GET /focus、start / stop 的 409、旧 POST /focus 回归（2-2）', async (t) => {
-  const { handler } = await setup(t)
+  const { handler, store } = await setup(t)
 
   const empty = await call(handler, { url: '/api/zhixing/focus' })
   assert.equal(empty.status, 200)
@@ -207,6 +207,10 @@ test('专注路由：GET /focus、start / stop 的 409、旧 POST /focus 回归�
   assert.equal(emptyData.remainingSec, null)
   assert.equal(emptyData.todayMinutes, 0)
   assert.equal(emptyData.goldenTime, '')
+
+  // goldenTime 由设置透传到 GET /focus（S5），默认空、设了就有
+  await store.saveSettings({ goldenTime: '07:30' })
+  assert.equal(JSON.parse((await call(handler, { url: '/api/zhixing/focus' })).payload).goldenTime, '07:30')
 
   // 没有 running 时先测参数非法：时长不在 25/45/60/90、todoId 不是当天重点 → 400
   const badPlanned = await call(handler, { method: 'POST', url: '/api/zhixing/focus/start', body: { plannedMinutes: 30 } })
