@@ -84,6 +84,10 @@ test('buildDrift：没有红色目标时不调用模型', async (t) => {
 })
 
 test('采纳建议：add_levers 建下周一待办并进候选，extend / pause / shrink / keep 生效，dismiss 记录', async (t) => {
+  // 这条用例断言 targetDate 会滚到 2026-11-23 之后的最近周一（快照周之后的下周一）。
+  // 不冻结时钟的话，真实日期过了 2026-11-23 就会滚到下一个周一，用例随日历变红。
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-20T12:00:00+08:00') })
+  t.after(() => t.mock.timers.reset())
   const store = await tempStore(t)
   await seedGoal(store)
   const ctx = fakeCtx(JSON.stringify({
