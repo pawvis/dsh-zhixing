@@ -277,7 +277,7 @@ test('第一重点：null 取消；重新确认或跳过时清掉失效的第一
   assert.equal((await leversState(store, DATE)).topTodoId, null, '跳过（0 个重点）也要清空')
 })
 
-test('第一重点：topLeverSet 只在从空设为非空时 +1，改选不重复计（M-1）', async (t) => {
+test('第一重点：topLeverSet 每天只计一次，取消后重设也不重复计（M-1）', async (t) => {
   const store = await tempStore(t)
   await seed(store)
   await setLevers(store, { date: DATE, items: ['t1', 't2'] })
@@ -285,13 +285,22 @@ test('第一重点：topLeverSet 只在从空设为非空时 +1，改选不重�
 
   assert.equal(await read(), 0)
   await setTop(store, DATE, 't1')
-  assert.equal(await read(), 1)
+  assert.equal(await read(), 1, '当天第一次设定 +1')
   await setTop(store, DATE, 't2')
   assert.equal(await read(), 1, '改选另一条不重复计')
   await setTop(store, DATE, null)
   assert.equal(await read(), 1, '取消不计')
   await setTop(store, DATE, 't1')
-  assert.equal(await read(), 2, '按方案口径：清空后再设 = 又一次「从空设为非空」')
+  assert.equal(await read(), 1, '取消后重设也不重复计')
+
+  const day = (await store.readJson('.internal/levers.json', { days: {} })).days[DATE]
+  assert.equal(day.topCounted, true, '当天记录里用 topCounted 去重')
+  assert.equal(day.topTodoId, 't1')
+
+  // 换一天再设：新的一天重新计 1 次
+  await setLevers(store, { date: '2026-11-19', items: ['t6'] })
+  await setTop(store, '2026-11-19', 't6')
+  assert.equal(await read(), 2, '换一天再设 +1')
 })
 
 test('第一重点：AI 推荐在任何阶段都不自动写 topTodoId（1-6）', async (t) => {
