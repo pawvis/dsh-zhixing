@@ -120,3 +120,46 @@ test('待办完成写 doneAt，重新打开时清掉', async (t) => {
   todos = await store.listTodoItems()
   assert.equal(todos.find((todo) => todo.id === 't1').doneAt, undefined)
 })
+
+test('POST /levers/top：设 / 取消第一重点，未确认的重点 400，精确匹配不漏到旧路由', async (t) => {
+  const { handler } = await setup(t)
+  await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/set',
+    body: { date: '2026-11-18', items: ['t1', 't2'] },
+  })
+
+  const set = await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/top',
+    body: { date: '2026-11-18', todoId: 't1' },
+  })
+  assert.equal(set.status, 200)
+  assert.equal(JSON.parse(set.payload).topTodoId, 't1')
+
+  const got = await call(handler, { url: '/api/zhixing/levers?date=2026-11-18' })
+  assert.equal(JSON.parse(got.payload).topTodoId, 't1')
+
+  // t3 是当天待办但没确认成重点 → 400
+  const bad = await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/top',
+    body: { date: '2026-11-18', todoId: 't3' },
+  })
+  assert.equal(bad.status, 400)
+
+  // 缺 todoId 不能当成取消处理
+  const missing = await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/top',
+    body: { date: '2026-11-18' },
+  })
+  assert.equal(missing.status, 400)
+
+  const cleared = await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/top',
+    body: { date: '2026-11-18', todoId: null },
+  })
+  assert.equal(cleared.status, 200)
+  assert.equal(JSON.parse(cleared.payload).topTodoId, null)
+
+  // 精确匹配：同前缀的未知路径仍然 404，说明没有用前缀吞路径
+  const unknown = await call(handler, { method: 'POST', url: '/api/zhixing/levers/topx', body: {} })
+  assert.equal(unknown.status, 404)
+})

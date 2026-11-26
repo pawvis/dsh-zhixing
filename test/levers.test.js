@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { candidateTodos, leversState, setLevers, skipLevers, suggestLevers } from '../lib/levers.js'
+import { candidateTodos, leversState, setLevers, setTop, skipLevers, suggestLevers } from '../lib/levers.js'
 import { morningMessage } from '../lib/reminders.js'
 import { Store, ValidationError } from '../lib/store.js'
 
@@ -209,4 +209,103 @@ test('调整杠杆时保留已完成的项，并计入 4 个上限', async (t) =
     setLevers(store, { date: DATE, items: ['t2', 't4', 't7', 't8'] }),
     (error) => error instanceof ValidationError && /最多 4 个/.test(error.message),
   )
+})
+
+function topLeverSetTotal(metrics) {
+  return Object.values(metrics.days ?? {}).reduce((sum, day) => sum + Number(day.topLeverSet ?? 0), 0)
+}
+
+test('第一重点：同日最多 1 条，新的覆盖旧的，rank 不变（1-1、1-3）', async (t) => {
+  const store = await tempStore(t)
+  await seed(store)
+  await setLevers(store, { date: DATE, items: ['t1', 't2'] })
+  const itemsBefore = (await store.readJson('.internal/levers.json', { days: {} })).days[DATE].items
+  assert.equal((await leversState(store, DATE)).topTodoId, null)
+
+  const first = await setTop(store, DATE, 't1')
+  assert.deepEqual(first, { date: DATE, topTodoId: 't1' })
+  const second = await setTop(store, DATE, 't2')
+  assert.equal(second.topTodoId, 't2')
+
+  const day = (await store.readJson('.internal/levers.json', { days: {} })).days[DATE]
+  assert.equal(day.topTodoId, 't2', '同一天只留 1 个第一重点')
+  assert.deepEqual(day.items, itemsBefore, '设第一重点不能改任何一条的 rank')
+  assert.equal((await leversState(store, DATE)).topTodoId, 't2')
+})
+
+test('第一重点：只能是当天已确认重点，否则 400（1-2）', async (t) => {
+  const store = await tempStore(t)
+  await seed(store)
+  await setLevers(store, { date: DATE, items: ['t1', 't2'] })
+
+  // t3 挂的是暂停目标、t4 是前一天的遗留，都不在当天已确认重点里。
+  for (const bad of ['t3', 't4', 'nope']) {
+    await assert.rejects(
+      setTop(store, DATE, bad),
+      (error) => error instanceof ValidationError && error.status === 400 && /已确认的重点/.test(error.message),
+    )
+  }
+  await assert.rejects(
+    setTop(store, '2026-11-19', 't1'),
+    (error) => error instanceof ValidationError && error.status === 400,
+  )
+  await assert.rejects(
+    setTop(store, '2026-13-01', 't1'),
+    (error) => error instanceof ValidationError && error.status === 400,
+  )
+  assert.equal((await leversState(store, DATE)).topTodoId, null, '校验失败不能留下第一重点')
+})
+
+test('第一重点：null 取消；重新确认或跳过时清掉失效的第一重点（2.1 数据规则）', async (t) => {
+  const store = await tempStore(t)
+  await seed(store)
+  await setLevers(store, { date: DATE, items: ['t1', 't2'] })
+
+  await setTop(store, DATE, 't1')
+  assert.deepEqual(await setTop(store, DATE, null), { date: DATE, topTodoId: null })
+  assert.equal((await leversState(store, DATE)).topTodoId, null)
+
+  await setTop(store, DATE, 't1')
+  await setLevers(store, { date: DATE, items: ['t1', 't2'] })
+  assert.equal((await leversState(store, DATE)).topTodoId, 't1', '重新确认仍含它时要保留')
+
+  await setLevers(store, { date: DATE, items: ['t2'] })
+  assert.equal((await leversState(store, DATE)).topTodoId, null, '重新确认不含它时要清空')
+
+  await setTop(store, DATE, 't2')
+  await skipLevers(store, DATE)
+  assert.equal((await leversState(store, DATE)).topTodoId, null, '跳过（0 个重点）也要清空')
+})
+
+test('第一重点：topLeverSet 只在从空设为非空时 +1，改选不重复计（M-1）', async (t) => {
+  const store = await tempStore(t)
+  await seed(store)
+  await setLevers(store, { date: DATE, items: ['t1', 't2'] })
+  const read = async () => topLeverSetTotal(await store.readJson('.internal/metrics.json', { days: {} }))
+
+  assert.equal(await read(), 0)
+  await setTop(store, DATE, 't1')
+  assert.equal(await read(), 1)
+  await setTop(store, DATE, 't2')
+  assert.equal(await read(), 1, '改选另一条不重复计')
+  await setTop(store, DATE, null)
+  assert.equal(await read(), 1, '取消不计')
+  await setTop(store, DATE, 't1')
+  assert.equal(await read(), 2, '按方案口径：清空后再设 = 又一次「从空设为非空」')
+})
+
+test('第一重点：AI 推荐在任何阶段都不自动写 topTodoId（1-6）', async (t) => {
+  const store = await tempStore(t)
+  await seed(store)
+  const ctx = fakeCtx(JSON.stringify({ levers: [{ todoId: 't1', goalId: 'g1', reason: '本周 0 证据' }] }))
+
+  await suggestLevers(store, ctx, { date: DATE, matchGoals })
+  assert.equal((await leversState(store, DATE)).topTodoId, null, '确认前推荐只写候选')
+
+  await setLevers(store, { date: DATE, items: ['t1', 't2'] })
+  await setTop(store, DATE, 't1')
+  await suggestLevers(store, ctx, { date: DATE, matchGoals, force: true })
+  assert.equal((await leversState(store, DATE)).topTodoId, 't1', '强制重推也不能改已设的第一重点')
+  const day = (await store.readJson('.internal/levers.json', { days: {} })).days[DATE]
+  assert.equal(day.topTodoId, 't1')
 })
