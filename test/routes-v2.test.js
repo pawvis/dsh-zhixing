@@ -101,6 +101,8 @@ test('POST /levers/suggest：AI 不可用时返回本地候选', async (t) => {
   const data = JSON.parse(res.payload)
   assert.equal(data.by, 'local')
   assert.ok(data.candidates.length >= 2)
+  assert.ok(data.topCandidate?.todoId, '推荐接口带出第一重点候选')
+  assert.equal(data.topCandidate.by, 'local')
 })
 
 test('待办完成写 doneAt，重新打开时清掉', async (t) => {

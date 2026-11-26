@@ -160,29 +160,54 @@ test('leversState 带出待办内容、完成数与候选池', async (t) => {
   assert.ok(!state.goals.some((goal) => goal.id === 'g2'))
 })
 
-test('早安文案：有杠杆只推杠杆 + 杂务数；无杠杆提示先选并只列前 4 条', () => {
+test('早安文案：有重点只推重点 + 杂务数；没重点提示先选并只列前 4 条', () => {
   const todos = [
-    { id: 't1', content: '杠杆一', date: DATE },
+    { id: 't1', content: '重点一', date: DATE },
     { id: 't2', content: '杂务一', date: DATE },
     { id: 't3', content: '杂务二', date: DATE },
     { id: 't4', content: '杂务三', date: DATE },
     { id: 't5', content: '杂务四', date: DATE },
   ]
-  const levers = [{ todoId: 't1', content: '杠杆一', done: false }]
-  const only = morningMessage({ date: DATE, todos, unfinished: [{ id: 'u1', content: '遗留', date: '2026-11-17' }], levers, leverMorningOnly: true })
-  assert.match(only.body, /今天的杠杆：1\) 杠杆一/)
+  const levers = [{ todoId: 't1', content: '重点一', done: false }]
+  const only = morningMessage({ date: DATE, todos, unfinished: [{ id: 'u1', content: '遗留', date: '2026-11-17' }], levers, topTodoId: 't1', leverMorningOnly: true })
+  assert.match(only.body, /今天的第一重点：重点一。如果今天只做一件事，就先做它。今天的重点：1\) 重点一/)
   assert.match(only.body, /另有 5 项杂务/)
   assert.doesNotMatch(only.body, /今天的待办有/)
 
-  const both = morningMessage({ date: DATE, todos, unfinished: [], levers, leverMorningOnly: false })
+  const both = morningMessage({ date: DATE, todos, unfinished: [], levers, topTodoId: 't1', leverMorningOnly: false })
   assert.match(both.body, /今天的待办有 5 项/)
-  assert.match(both.body, /今天的杠杆：1\) 杠杆一/)
+  assert.match(both.body, /今天的第一重点：重点一/)
+  assert.match(both.body, /今天的重点：1\) 重点一/)
 
   const none = morningMessage({ date: DATE, todos, unfinished: [], levers: [], leverMorningOnly: true })
-  assert.match(none.body, /先选今天的 2–4 个杠杆/)
-  assert.match(none.body, /1\) 杠杆一/)
+  assert.match(none.body, /先选今天的 2–4 个重点，再挑出最重要的那一个吧。/)
+  assert.match(none.body, /1\) 重点一/)
   assert.match(none.body, /4\) 杂务三/)
   assert.doesNotMatch(none.body, /5\) 杂务四/)
+})
+
+test('早安三种文案逐字：已设第一重点 / 没设第一重点 / 当天没有重点（1-4）', () => {
+  const todos = [
+    { id: 't1', content: '写偏航报告测试', date: DATE },
+    { id: 't2', content: '回邮件', date: DATE },
+  ]
+  const levers = [
+    { todoId: 't1', content: '写偏航报告测试', done: false },
+    { todoId: 't2', content: '回邮件', done: false },
+  ]
+
+  const withTop = morningMessage({ date: DATE, todos, unfinished: [], levers, topTodoId: 't1' })
+  assert.equal(withTop.body, '今天的第一重点：写偏航报告测试。如果今天只做一件事，就先做它。今天的重点：1) 写偏航报告测试；2) 回邮件。')
+
+  const noTop = morningMessage({ date: DATE, todos, unfinished: [], levers, topTodoId: null })
+  assert.equal(noTop.body, '如果今天只做一件事，哪件最能推进你的目标？去重点卡里点 ★ 选一个。今天的重点：1) 写偏航报告测试；2) 回邮件。')
+
+  const none = morningMessage({ date: DATE, todos, unfinished: [], levers: [] })
+  assert.equal(none.body, '今天的待办有 2 项：1) 写偏航报告测试；2) 回邮件，请及时完成哦。\n先选今天的 2–4 个重点，再挑出最重要的那一个吧。')
+
+  // N-1：提醒输出不出现「杠杆」，也不读北极星任何字段。
+  for (const message of [withTop, noTop, none]) assert.doesNotMatch(message.body, /杠杆|北极星|愿景/)
+  assert.doesNotMatch(noTop.body, /北极星|反愿景|身份宣言/)
 })
 
 test('调整杠杆时保留已完成的项，并计入 4 个上限', async (t) => {
@@ -308,8 +333,9 @@ test('第一重点：AI 推荐在任何阶段都不自动写 topTodoId（1-6）'
   await seed(store)
   const ctx = fakeCtx(JSON.stringify({ levers: [{ todoId: 't1', goalId: 'g1', reason: '本周 0 证据' }] }))
 
-  await suggestLevers(store, ctx, { date: DATE, matchGoals })
-  assert.equal((await leversState(store, DATE)).topTodoId, null, '确认前推荐只写候选')
+  const suggested = await suggestLevers(store, ctx, { date: DATE, matchGoals })
+  assert.ok(suggested.topCandidate?.todoId, '推荐时给出第一重点候选')
+  assert.equal((await leversState(store, DATE)).topTodoId, null, '确认前推荐只写候选，不写第一重点')
 
   await setLevers(store, { date: DATE, items: ['t1', 't2'] })
   await setTop(store, DATE, 't1')
@@ -317,4 +343,52 @@ test('第一重点：AI 推荐在任何阶段都不自动写 topTodoId（1-6）'
   assert.equal((await leversState(store, DATE)).topTodoId, 't1', '强制重推也不能改已设的第一重点')
   const day = (await store.readJson('.internal/levers.json', { days: {} })).days[DATE]
   assert.equal(day.topTodoId, 't1')
+})
+
+test('第一重点候选：AI 的 top 不在本次候选里就丢弃，改用 rank 最小那条（1-5）', async (t) => {
+  const store = await tempStore(t)
+  await seed(store)
+  const ctx = fakeCtx(JSON.stringify({
+    levers: [
+      { todoId: 't1', goalId: 'g1', reason: '本周 0 证据' },
+      { todoId: 't2', goalId: 'g1', reason: '补位' },
+    ],
+    top: { todoId: 't9', reason: '模型给了个没选中的' },
+  }))
+  const result = await suggestLevers(store, ctx, { date: DATE, matchGoals })
+  assert.equal(result.by, 'ai')
+  assert.deepEqual(result.candidates.map((item) => item.todoId), ['t1', 't2'])
+  assert.equal(result.topCandidate.todoId, 't1', '弃用越界候选，改用 rank 最小（第一条）')
+  assert.equal(result.topCandidate.by, 'local')
+  assert.equal(result.topCandidate.reason, '本周 0 证据')
+  assert.ok(result.topCandidate.reason.length <= 60)
+})
+
+test('第一重点候选：AI 的 top 有效就用它，reason 截到 60 字（1-5 补充）', async (t) => {
+  const store = await tempStore(t)
+  await seed(store)
+  const longReason = '理'.repeat(80)
+  const ctx = fakeCtx(JSON.stringify({
+    levers: [
+      { todoId: 't1', goalId: 'g1', reason: '本周 0 证据' },
+      { todoId: 't2', goalId: 'g1', reason: '补位' },
+    ],
+    top: { todoId: 't2', reason: longReason },
+  }))
+  const result = await suggestLevers(store, ctx, { date: DATE, matchGoals })
+  assert.equal(result.by, 'ai')
+  assert.equal(result.topCandidate.todoId, 't2')
+  assert.equal(result.topCandidate.by, 'ai')
+  assert.equal(result.topCandidate.reason.length, 60, 'reason 截到 MAX_LEVER_REASON')
+  assert.equal(result.topCandidate.reason, '理'.repeat(60))
+})
+
+test('第一重点候选：没有模型时用候选里 rank 最小的那条（本地兜底，1-5 补充）', async (t) => {
+  const store = await tempStore(t)
+  await seed(store)
+  const result = await suggestLevers(store, { get: () => undefined }, { date: DATE, matchGoals })
+  assert.equal(result.by, 'local')
+  assert.equal(result.topCandidate.todoId, result.candidates[0].todoId)
+  assert.equal(result.topCandidate.by, 'local')
+  assert.ok(result.topCandidate.reason.length <= 60)
 })
