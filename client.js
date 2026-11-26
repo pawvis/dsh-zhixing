@@ -20,6 +20,12 @@ window.__ModuleLoader__.load({
     // 与 lib/levers.js 的 LEVER_MIN / LEVER_MAX 保持一致。
     const LEVER_MIN = 2
     const LEVER_MAX = 4
+    // 与 lib/focus.js 的 PLANNED_MINUTES 保持一致；默认 60 分钟。
+    const FOCUS_PRESETS = [25, 45, 60, 90]
+    function focusClock(totalSec) {
+      const sec = Math.max(0, Math.ceil(Number(totalSec) || 0))
+      return `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`
+    }
     // 城市 → 时区。插件里所有日期和时间都以设置里的城市时区为准。
     const CITY_TZ = {
       北京: 'Asia/Shanghai', 上海: 'Asia/Shanghai', 广州: 'Asia/Shanghai', 深圳: 'Asia/Shanghai',
@@ -2020,6 +2026,25 @@ window.__ModuleLoader__.load({
       .wb-lever-pick.on{border-color:var(--wb-accent);background:rgba(59,130,246,.06)}
       .wb-lever-pick.locked{opacity:.7;background:rgba(127,127,127,.04)}
       .wb-lever-tag{display:inline-block;margin-left:6px;font-size:10px;color:var(--wb-warn,#B45309);background:rgba(180,83,9,.10);border-radius:999px;padding:1px 7px;font-weight:500}
+      .wb-lever-top-star{flex:none;width:22px;height:22px;display:flex;align-items:center;justify-content:center;border:none;background:none;padding:0;color:var(--wb-text-3);font-size:15px;line-height:1;cursor:pointer;border-radius:6px;transition:color .15s ease,background .15s ease}
+      .wb-lever-top-star:hover{background:rgba(217,119,6,.10);color:var(--wb-warn,#B45309)}
+      .wb-lever-top-star.on{color:var(--wb-warn,#B45309)}
+      .wb-lever-top-star:disabled{opacity:.45;cursor:default}
+      .wb-lever-row.is-top{background:rgba(217,119,6,.07)}
+      .wb-lever-row.is-top .wb-lever-title{font-weight:700}
+      .wb-lever-top-tag{display:inline-block;margin-left:6px;font-size:10px;color:var(--wb-warn,#B45309);background:rgba(180,83,9,.14);border-radius:999px;padding:1px 7px;font-weight:500;vertical-align:middle}
+      .wb-lever-top-cand{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border:1px dashed rgba(180,83,9,.45);border-radius:10px;background:rgba(180,83,9,.06)}
+      .wb-lever-top-cand-text{flex:1;min-width:0;font-size:12px;line-height:1.6}
+      .wb-focus{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+      .wb-focus-today{font-size:11px;color:var(--wb-text-3)}
+      .wb-focus-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;border:1px solid rgba(59,130,246,.22);border-radius:10px;background:rgba(59,130,246,.07)}
+      .wb-focus-bar.idle{border-color:var(--wb-border);background:rgba(127,127,127,.04)}
+      .wb-focus-time{font-variant-numeric:tabular-nums;font-size:20px;font-weight:700;letter-spacing:.5px;color:var(--wb-accent,#2563EB);line-height:1.1}
+      .wb-focus-title{font-size:12px;font-weight:600;line-height:1.5}
+      .wb-focus-sub{font-size:11px;color:var(--wb-text-3)}
+      .wb-focus-pick{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px dashed var(--wb-border);border-radius:10px}
+      .wb-lever-focus{flex:none;align-self:center}
+      .wb-lever-focus.muted{opacity:.55;filter:grayscale(.3)}
       @keyframes wb-lever-pop{0%{transform:scale(1)}35%{transform:scale(1.015)}100%{transform:scale(1)}}
       .wb-lever-row.just-done{animation:wb-lever-pop .6s ease}
       @media(prefers-reduced-motion:reduce){.wb-lever-row.just-done{animation:none}}
@@ -2184,7 +2209,14 @@ window.__ModuleLoader__.load({
       if (options?.signal) init.signal = options.signal
       const response = await fetch(`${API}${path}`, init)
       const data = await response.json().catch(() => ({ ok: false, error: `HTTP ${response.status}` }))
-      if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`)
+      if (!response.ok || data.ok === false) {
+        // message 是给人看的友好文案（如专注 409）；error 是给代码判断的错误码。
+        const error = new Error(data.message || data.error || `HTTP ${response.status}`)
+        error.status = response.status
+        error.code = data.code || data.error
+        error.payload = data
+        throw error
+      }
       return data
     }
 
@@ -2695,6 +2727,10 @@ window.__ModuleLoader__.load({
           try { window.dispatchEvent(new CustomEvent('zhixing:goto', { detail: { tab } })) } catch { /* 忽略 */ }
           if (tab === 'today' && notice) {
             try { window.dispatchEvent(new CustomEvent('zhixing:notice', { detail: notice })) } catch { /* 忽略 */ }
+            // 2.2 黄金时段：带上 action，今日页据此预选第一重点的计时（不自动开始）。
+            if (notice.action?.open === 'today') {
+              try { window.dispatchEvent(new CustomEvent('zhixing:focus', { detail: notice.action })) } catch { /* 忽略 */ }
+            }
           }
         }, 60)
       }, [])
@@ -4207,7 +4243,7 @@ window.__ModuleLoader__.load({
                   ) : null,
                   leverIds.size
                     ? h(React.Fragment, null,
-                      leverTodos.length ? renderGroup('levers', '⚡ 今日杠杆', leverTodos) : null,
+                      leverTodos.length ? renderGroup('levers', '⚡ 今日重点', leverTodos) : null,
                       chores.length
                         ? renderGroup('chores', `杂务 ${chores.length} 项（此前未完成 ${choresOverdue.length} / 今日 ${choresToday.length}）`, chores, { defaultCollapsed: true })
                         : null)
@@ -4740,7 +4776,7 @@ window.__ModuleLoader__.load({
           tab === 'sign' ? signBody : tab === 'tarot' ? tarotBody : starBody,
           h('div', { className: 'wb-lucky-foot' }, footer)))
     }
-    function TodayTab({ state, refresh, show, suggestions, onApplySuggestion, onDismissSuggestion, notice, onCloseNotice, onSnoozeNotice, panelWidth = 0 }) {
+    function TodayTab({ state, refresh, show, suggestions, onApplySuggestion, onDismissSuggestion, notice, onCloseNotice, onSnoozeNotice, panelWidth = 0, focusPreset = null, onFocusPresetUsed = null }) {
       const SPLIT_GAP = 8
       const MAIN_MIN = 360
       const RAIL_MIN = 340
@@ -4798,7 +4834,11 @@ window.__ModuleLoader__.load({
           onOpenReport: (options) => setReportEditor({ date: state.today, ...options }),
         }) : null,
         h(DailyBanner, { settings: state.settings, show, timezone: state.timezone }),
-        h(V2LeverCard, { levers: state.levers, refresh, show, ai: state.ai, animate: state.settings?.leverAnimation !== false }),
+        h(V2LeverCard, {
+          levers: state.levers, refresh, show, ai: state.ai,
+          animate: state.settings?.leverAnimation !== false,
+          focusPreset, onFocusPresetUsed,
+        }),
         h(Suggestions, { items: suggestions, onApply: onApplySuggestion, onDismiss: onDismissSuggestion }),
         h('div', { className: `wb-today${narrow ? ' wb-today-narrow' : ''}`, style: narrow ? undefined : { gridTemplateColumns: `minmax(${MAIN_MIN}px, 1fr) ${SPLIT_GAP}px ${effectiveRail}px` } },
           h('div', { className: 'wb-col' }, h(TodoBoard, { state, refresh, show, ai: state.ai })),
@@ -4929,7 +4969,7 @@ window.__ModuleLoader__.load({
                     goal.signal === 'red' && goal.redStreak > 1 ? h('span', { className: 'wb-drift-streak' }, `连续 ${goal.redStreak} 周 0 证据`) : null))
                   : h('div', { className: 'wb-hint' }, '这一周没有需要统计的目标。')),
               h('div', { className: 'wb-drift-section' },
-                h('div', { className: 'wb-drift-title' }, '二、杠杆'),
+                h('div', { className: 'wb-drift-title' }, '二、重点'),
                 h('div', { className: 'wb-small wb-muted' }, `设了 ${levers.daysSet ?? 0}/${levers.workdays ?? 0} 个工作日 · 完成 ${levers.done ?? 0}/${levers.total ?? 0}${levers.mostPostponed?.times ? ` · 顺延最多 ×${levers.mostPostponed.times}` : ''}`)),
               h('div', { className: 'wb-drift-section' },
                 h('div', { className: 'wb-drift-title' }, '三、修正建议'),
@@ -5015,7 +5055,7 @@ window.__ModuleLoader__.load({
       return h(Modal, {
         title: `⚔️ 今日 Boss${stateDateLabel()}`, size: 'md', onClose,
         footer: [
-          boss ? h('button', { key: 'levers', className: 'wb-btn', onClick: () => { onClose(); onGoLevers?.() } }, '去选今天的杠杆') : null,
+          boss ? h('button', { key: 'levers', className: 'wb-btn', onClick: () => { onClose(); onGoLevers?.() } }, '去选今天的重点') : null,
           h('button', { key: 'close', className: 'wb-btn primary', onClick: onClose }, '关闭'),
         ],
       },
@@ -5491,20 +5531,97 @@ window.__ModuleLoader__.load({
       }, body)
     }
 
-    /** 2.0 · 今日杠杆卡（今日页 DailyBanner 下方） */
-    function V2LeverCard({ levers, refresh, show, ai, animate }) {
+    /** 2.0 · 今日重点卡（今日页 DailyBanner 下方）；2.2 加第一重点 ☆/★、推荐候选与专注块 */
+    function V2LeverCard({ levers, refresh, show, ai, animate, focusPreset = null, onFocusPresetUsed = null }) {
       const [busy, setBusy] = useState('')
       const [adjustOpen, setAdjustOpen] = useState(false)
       const [justDone, setJustDone] = useState('')
+      // suggest 的 topCandidate 只返回不写盘，先留在组件里，用户点了才调 /levers/top。
+      const [suggestedTop, setSuggestedTop] = useState(null)
+      // 2.2 专注块：focusState 来自 GET /focus；剩余时间按服务端 start 现算，前端只负责显示。
+      const [focusState, setFocusState] = useState(null)
+      const [focusBusy, setFocusBusy] = useState('')
+      const [pendingStart, setPendingStart] = useState(null)
+      const [, forceTick] = useState(0)
+      const zeroRef = useRef('')
       const off = aiOffOf(ai)
+
+      const loadFocus = useCallback(async () => {
+        try { setFocusState(await request('/focus')) } catch { /* 专注状态取不到不影响重点卡 */ }
+      }, [])
+      useEffect(() => { void loadFocus() }, [loadFocus])
+      // 本地每 1 秒重绘倒计时；真正剩余秒数仍由服务端 start 计算。
+      useEffect(() => {
+        const tick = setInterval(() => forceTick((value) => value + 1), 1000)
+        return () => clearInterval(tick)
+      }, [])
+      // 每 30 秒和服务端对一次（多设备 / 后台补记后能跟上）。
+      useEffect(() => {
+        const sync = setInterval(() => { void loadFocus() }, 30_000)
+        return () => clearInterval(sync)
+      }, [loadFocus])
+
+      const items = levers?.items ?? []
+      const focusRunning = focusState?.running ?? null
+      const remainingSec = focusRunning
+        ? Math.max(0, Math.ceil((new Date(focusRunning.start).getTime() + Number(focusRunning.plannedMinutes) * 60_000 - Date.now()) / 1000))
+        : null
+      // 到 0 时让服务端补记一次（sweep），同一块只触发一次。
+      useEffect(() => {
+        if (!focusRunning || remainingSec > 0) return
+        if (zeroRef.current === focusRunning.id) return
+        zeroRef.current = focusRunning.id
+        void loadFocus()
+      }, [focusRunning, remainingSec, loadFocus])
+      // 黄金时段提醒点进来：打开时长选择，但不自动开始。
+      useEffect(() => {
+        if (!focusPreset) return
+        const todoId = focusPreset.todoId ?? null
+        if (!focusRunning) {
+          const item = todoId ? (levers?.items ?? []).find((entry) => String(entry.todoId) === String(todoId)) : null
+          setPendingStart({ todoId, content: item?.content ?? '', minutes: 60 })
+          try { document.querySelector('.wb-lever-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) } catch { /* 忽略 */ }
+        }
+        onFocusPresetUsed?.()
+      }, [focusPreset])
+
       if (!levers) return null
-      const items = levers.items ?? []
       const candidates = levers.candidates ?? []
+      const topTodoId = levers.topTodoId ?? null
       const done = items.filter((item) => item.status === '完成').length
       const date = levers.date || todayKey()
+      const runningItem = focusRunning?.todoId
+        ? items.find((entry) => String(entry.todoId) === String(focusRunning.todoId))
+        : null
       const run = async (label, fn) => {
         setBusy(label)
         try { await fn() } catch (error) { show(error.message, 'error') } finally { setBusy('') }
+      }
+      // 专注接口的 409 是预期分支，用普通提示而不是报错样式。
+      const focusAction = async (label, fn) => {
+        setFocusBusy(label)
+        try { await fn() } catch (error) {
+          if (error?.status === 409) show(error.message || '已有专注进行中，先结束当前这个')
+          else show(error.message, 'error')
+        } finally { setFocusBusy('') }
+      }
+      const beginFocus = (minutes, todoId) => focusAction('start', async () => {
+        await request('/focus/start', { plannedMinutes: minutes, todoId })
+        setPendingStart(null)
+        await loadFocus()
+        show(todoId ? '专注开始，先做第一重点' : '专注开始')
+      })
+      const stopFocus = () => focusAction('stop', async () => {
+        const res = await request('/focus/stop', {})
+        await loadFocus()
+        const record = res.record ?? {}
+        show(record.endedBy === 'abandon'
+          ? `不到 5 分钟，记为放弃（${record.actualMinutes ?? 0} 分钟）`
+          : `专注 ${record.actualMinutes ?? 0} 分钟，已记录`)
+      })
+      const askFocus = (todoId, content) => {
+        if (focusRunning) { show('已有专注进行中，先结束当前这个'); return }
+        setPendingStart({ todoId, content, minutes: 60 })
       }
       const toggle = (item) => {
         const next = item.status === '完成' ? '未做' : '完成'
@@ -5517,41 +5634,131 @@ window.__ModuleLoader__.load({
           await refresh()
         })
       }
+      const setTop = (todoId) => run('top', async () => {
+        await request('/levers/top', { date, todoId })
+        setSuggestedTop(null)
+        await refresh()
+        show(todoId ? '已设为第一重点' : '已取消第一重点')
+      })
       const confirmCandidates = () => run('confirm', async () => {
         const res = await request('/levers/set', {
           date,
           items: candidates.map((item) => ({ todoId: item.todoId, goalId: item.goalId })),
         })
+        setSuggestedTop(null)
         await refresh()
-        show(res.belowMin ? '已设 1 个杠杆；通常 2–4 个更合适' : `已设 ${res.items?.length ?? 0} 个杠杆`)
+        show(res.belowMin ? '已设 1 个重点；通常 2–4 个更合适' : `已设 ${res.items?.length ?? 0} 个重点`)
+      })
+      const acceptTopCandidate = (candidate) => run('top', async () => {
+        // 候选还没确认成重点时，先确认再设；始终是用户点了才写。
+        if (!items.length) {
+          await request('/levers/set', {
+            date,
+            items: candidates.map((item) => ({ todoId: item.todoId, goalId: item.goalId })),
+          })
+        }
+        await request('/levers/top', { date, todoId: candidate.todoId })
+        setSuggestedTop(null)
+        await refresh()
+        show('已设为第一重点')
       })
       const skip = () => run('skip', async () => {
         await request('/levers/skip', { date })
         await refresh()
-        show('今天不设杠杆')
+        show('今天不设重点')
       })
       const suggest = () => run('suggest', async () => {
         if (off) { show(`AI 暂时不可用：${aiReasonOf(ai)}`, 'error'); return }
         const res = await request('/levers/suggest', { date, force: true })
+        setSuggestedTop(res.topCandidate ?? null)
         await refresh()
         show(res.by === 'ai' ? `AI 推荐了 ${res.candidates?.length ?? 0} 条候选` : `本地匹配了 ${res.candidates?.length ?? 0} 条候选`)
       })
 
+      // 第一重点排第 1 行：只改显示顺序，levers.json 里的 rank 不动。
+      const ordered = topTodoId
+        ? [...items].sort((a, b) => (String(a.todoId) === String(topTodoId) ? -1 : String(b.todoId) === String(topTodoId) ? 1 : 0))
+        : items
+      const topCandidate = suggestedTop && candidates.some((item) => String(item.todoId) === String(suggestedTop.todoId)) ? suggestedTop : null
+      const topCandidateItem = topCandidate ? candidates.find((item) => String(item.todoId) === String(topCandidate.todoId)) : null
+
+      const focusBlock = h('div', { className: 'wb-focus' },
+        h('div', { className: 'wb-focus-today' }, `今日专注 ${focusState?.todayMinutes ?? 0} 分钟`),
+        focusRunning
+          ? h('div', { className: 'wb-focus-bar' },
+            h('div', { className: 'wb-focus-time' }, focusClock(remainingSec)),
+            h('div', { style: { flex: 1, minWidth: 0 } },
+              h('div', { className: 'wb-focus-title' }, runningItem?.content || '专注中'),
+              h('div', { className: 'wb-focus-sub' }, `计划 ${focusRunning.plannedMinutes} 分钟${focusRunning.isTop ? ' · 第一重点' : ''}`)),
+            h('button', {
+              className: 'wb-btn sm primary', disabled: focusBusy === 'stop', onClick: stopFocus,
+            }, focusBusy === 'stop' ? '结束中…' : '结束'))
+          : h('div', { className: 'wb-focus-bar idle' },
+            h('div', { className: 'wb-focus-title' }, '还没开始专注'),
+            h('div', { style: { flex: 1 } }),
+            h('button', {
+              className: 'wb-btn sm', disabled: focusBusy === 'start',
+              onClick: () => askFocus(null, ''),
+            }, '开一个专注块')),
+        pendingStart
+          ? h('div', { className: 'wb-focus-pick' },
+            h('div', { className: 'wb-small wb-muted' }, pendingStart.content ? `给「${pendingStart.content}」开一个专注块：` : '开一个专注块：'),
+            h('div', { className: 'wb-row', style: { gap: 6, flexWrap: 'wrap' } },
+              FOCUS_PRESETS.map((minutes) => h('button', {
+                key: minutes, className: `wb-btn sm${(pendingStart.minutes ?? 60) === minutes ? ' primary' : ''}`,
+                onClick: () => setPendingStart({ ...pendingStart, minutes }),
+              }, `${minutes} 分钟`)),
+              h('button', {
+                className: 'wb-btn sm primary', disabled: focusBusy === 'start',
+                onClick: () => beginFocus(pendingStart.minutes ?? 60, pendingStart.todoId ?? null),
+              }, focusBusy === 'start' ? '开始中…' : '开始'),
+              h('button', { className: 'wb-btn sm ghost', onClick: () => setPendingStart(null) }, '取消')))
+          : null)
+
       const body = items.length
-        ? h('div', { className: 'wb-lever-list' }, items.map((item) => h('div', {
-          key: item.todoId,
-          className: `wb-lever-row${item.status === '完成' ? ' done' : ''}${justDone === item.todoId ? ' just-done' : ''}`,
-        },
-        h('button', {
-          type: 'button', className: `wb-check sel${item.status === '完成' ? ' on' : ''}`, role: 'checkbox',
-          'aria-checked': item.status === '完成', 'aria-label': item.status === '完成' ? '标记未完成' : '标记完成',
-          onClick: () => toggle(item),
-        }),
-        h('div', { style: { flex: 1, minWidth: 0 } },
-          h('div', { className: 'wb-lever-title' }, item.content),
-          item.goalTitle ? h('div', { className: 'wb-lever-goal' }, `▸ ${item.goalTitle}`) : null))))
+        ? h('div', { className: 'wb-lever-list' }, ordered.map((item) => {
+          const isTop = String(item.todoId) === String(topTodoId)
+          return h('div', {
+            key: item.todoId,
+            className: `wb-lever-row${item.status === '完成' ? ' done' : ''}${justDone === item.todoId ? ' just-done' : ''}${isTop ? ' is-top' : ''}`,
+          },
+          h('button', {
+            type: 'button', className: `wb-lever-top-star${isTop ? ' on' : ''}`, disabled: Boolean(busy),
+            'aria-pressed': isTop, 'aria-label': isTop ? '取消第一重点' : '设为第一重点',
+            title: isTop ? '取消第一重点' : '设为第一重点',
+            onClick: () => void setTop(isTop ? null : item.todoId),
+          }, isTop ? '★' : '☆'),
+          h('button', {
+            type: 'button', className: `wb-check sel${item.status === '完成' ? ' on' : ''}`, role: 'checkbox',
+            'aria-checked': item.status === '完成', 'aria-label': item.status === '完成' ? '标记未完成' : '标记完成',
+            onClick: () => toggle(item),
+          }),
+          h('div', { style: { flex: 1, minWidth: 0 } },
+            h('div', { className: 'wb-lever-title' }, item.content,
+              isTop ? h('span', { className: 'wb-lever-top-tag' }, '第一重点') : null),
+            item.goalTitle ? h('div', { className: 'wb-lever-goal' }, `▸ ${item.goalTitle}`) : null),
+          h('button', {
+            type: 'button',
+            className: `wb-btn sm wb-lever-focus${isTop ? ' primary' : ''}${focusRunning ? ' muted' : ''}`,
+            disabled: focusBusy === 'start' || Boolean(busy),
+            'aria-disabled': Boolean(focusRunning) || undefined,
+            title: focusRunning ? '已有专注进行中' : '开始专注',
+            onClick: () => askFocus(item.todoId, item.content),
+          }, '专注'))
+        }))
         : levers.candidateStatus === 'pending' && candidates.length
           ? h('div', { className: 'wb-lever-pending' },
+            topCandidate && topCandidateItem
+              ? h('div', { className: 'wb-lever-top-cand' },
+                h('div', { className: 'wb-lever-top-cand-text' },
+                  h('b', null, '第一重点候选：'),
+                  h('span', null, topCandidateItem.content),
+                  topCandidate.reason ? h('span', { className: 'wb-lever-reason' }, `（${topCandidate.reason}）`) : null),
+                h('button', {
+                  className: 'wb-btn sm primary', disabled: Boolean(busy),
+                  onClick: () => void acceptTopCandidate(topCandidateItem),
+                }, busy === 'top' ? '设置中…' : '设为第一重点'))
+              : null,
             h('div', { className: 'wb-hint' }, `AI 推荐了 ${candidates.length} 条候选，确认后才会写进今天的目标：`),
             h('div', { className: 'wb-lever-cands' }, candidates.map((item) => h('div', { key: item.todoId, className: 'wb-lever-cand' },
               h('span', { className: 'wb-lever-cand-title' }, item.content),
@@ -5563,10 +5770,10 @@ window.__ModuleLoader__.load({
               h('button', { className: 'wb-btn sm ghost', disabled: Boolean(busy), onClick: skip }, '今天不设')))
           : levers.candidateStatus === 'skipped'
             ? h('div', { className: 'wb-lever-pending' },
-              h('div', { className: 'wb-hint' }, '今天不设杠杆。'),
+              h('div', { className: 'wb-hint' }, '今天不设重点。'),
               h('div', { className: 'wb-row' }, h('button', { className: 'wb-btn sm', onClick: () => setAdjustOpen(true) }, '改一改')))
             : h('div', { className: 'wb-lever-pending' },
-              h('div', { className: 'wb-hint' }, '今天还没设杠杆。先挑 ' + LEVER_MIN + '–' + LEVER_MAX + ' 个能推动目标的待办。'),
+              h('div', { className: 'wb-hint' }, '今天还没设重点。先挑 ' + LEVER_MIN + '–' + LEVER_MAX + ' 个能推动目标的待办。'),
               h('div', { className: 'wb-row' },
                 h('button', {
                   className: 'wb-btn sm ai', disabled: off || Boolean(busy), title: off ? `AI 暂时不可用：${aiReasonOf(ai)}` : '让 AI 从待办里挑候选',
@@ -5577,11 +5784,12 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'wb-card wb-lever-card' },
         h('div', { className: 'wb-lever-head' },
           h('div', { className: 'wb-lever-title-wrap' },
-            h('b', null, '⚡ 今日杠杆'),
+            h('b', null, '⚡ 今日重点'),
             items.length ? h('span', { className: 'wb-badge' }, `${done}/${items.length} 完成`) : null,
-            items.length === 1 ? h('span', { className: 'wb-lever-single' }, '今天 1 个杠杆') : null),
+            items.length === 1 ? h('span', { className: 'wb-lever-single' }, '今天 1 个重点') : null),
           h('div', { className: 'wb-spacer' }),
           h('button', { className: 'wb-btn ghost sm', onClick: () => setAdjustOpen(true) }, items.length ? '调整' : '选择')),
+        focusBlock,
         body,
         adjustOpen ? h(V2LeverModal, {
           levers, refresh, show, onClose: () => setAdjustOpen(false),
@@ -5589,7 +5797,7 @@ window.__ModuleLoader__.load({
         }) : null)
     }
 
-    /** 2.0 · 选择今天的杠杆（候选 + 挂目标 + 新建待办） */
+    /** 2.0 · 选择今天的重点（候选 + 挂目标 + 新建待办） */
     function V2LeverModal({ levers, refresh, show, onClose, initialSelected, focusTodoId }) {
       const data = levers ?? {}
       const date = data.date || todayKey()
@@ -5624,7 +5832,7 @@ window.__ModuleLoader__.load({
           setSelected(next)
           return
         }
-        if (selected.size + locked.length >= LEVER_MAX) { show(`杠杆最多 ${LEVER_MAX} 个，先放下一个`, 'error'); return }
+        if (selected.size + locked.length >= LEVER_MAX) { show(`重点最多 ${LEVER_MAX} 个，先放下一个`, 'error'); return }
         setSelected(new Set(selected).add(id))
       }
       const addTodo = async () => {
@@ -5653,7 +5861,7 @@ window.__ModuleLoader__.load({
             items: [...selected].map((id) => ({ todoId: id, goalId: goalOf[id] || null })),
           })
           await refresh()
-          show(res.belowMin ? '已设 1 个杠杆；通常 2–4 个更合适' : `已设 ${res.items?.length ?? 0} 个杠杆`)
+          show(res.belowMin ? '已设 1 个重点；通常 2–4 个更合适' : `已设 ${res.items?.length ?? 0} 个重点`)
           onClose()
         } catch (error) { show(error.message, 'error') } finally { setBusy('') }
       }
@@ -5661,7 +5869,7 @@ window.__ModuleLoader__.load({
       const lockedRows = locked.map((item) => h('div', { key: `locked-${item.todoId}`, className: 'wb-lever-pick locked' },
         h('button', {
           type: 'button', className: 'wb-check sel on', role: 'checkbox', 'aria-checked': true,
-          'aria-label': '已完成的杠杆', disabled: true,
+          'aria-label': '已完成的重点', disabled: true,
         }),
         h('div', { style: { flex: 1, minWidth: 0 } },
           h('div', { className: 'wb-lever-title' }, item.content, h('span', { className: 'wb-lever-tag' }, '已完成')),
@@ -5687,7 +5895,7 @@ window.__ModuleLoader__.load({
         : h('div', { className: 'wb-hint' }, '今天没有可选的待办，先在下面新建一条。')
 
       return h(Modal, {
-        title: '选今天的杠杆',
+        title: '选今天的重点',
         size: 'md',
         onClose,
         footer: [
@@ -5707,7 +5915,7 @@ window.__ModuleLoader__.load({
       h('div', { className: 'wb-lever-pool' }, [...lockedRows, ...rows]),
       h('div', { className: 'wb-row', style: { marginTop: 10 } },
         h('input', {
-          className: 'wb-input', placeholder: '新建一条待办并设为杠杆', value: newText,
+          className: 'wb-input', placeholder: '新建一条待办并设为重点', value: newText,
           onChange: (event) => setNewText(event.target.value),
           onKeyDown: (event) => { if (event.key === 'Enter') { event.preventDefault(); void addTodo() } },
         }),
@@ -8363,7 +8571,7 @@ window.__ModuleLoader__.load({
             ? h('div', { className: 'wb-ns-guide' },
               h('div', { className: 'wb-ns-guide-text' },
                 h('b', null, '给目标一个方向'),
-                h('div', { className: 'wb-hint' }, '约 3 分钟。写完后，目标和杠杆会更有方向。')),
+                h('div', { className: 'wb-hint' }, '约 3 分钟。写完后，目标和重点会更有方向。')),
               h('div', { className: 'wb-spacer' }),
               h('button', { className: 'wb-btn primary sm', onClick: onOpenNorthStar }, '写北极星'),
               h('button', {
@@ -8883,6 +9091,7 @@ window.__ModuleLoader__.load({
         catch (error) { show(error.message, 'error'); setDirty(true) }
       }
       const save = async () => {
+        if (goldenInvalid) { show('黄金时段格式应为 HH:mm（00:00–23:59），或留空', 'error'); return }
         try {
           const city = form.region || form.weatherCity || ''
           const settings = {
@@ -8939,6 +9148,8 @@ window.__ModuleLoader__.load({
         setForm({ ...form, northStar: { ...northStar, ...patch } })
         setDirty(true)
       }
+      const goldenValue = String(form.goldenTime ?? '')
+      const goldenInvalid = goldenValue !== '' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(goldenValue)
       const hm = (key, label) => {
         const [hh, mm] = String(form[key] ?? '09:00').split(':')
         return h('div', { className: 'wb-row', style: { gap: 4 } },
@@ -8995,6 +9206,19 @@ window.__ModuleLoader__.load({
         { id: 'daily', label: '日常', hint: '提醒 · 地区 · 节假日', items: [section('提醒', '到点会在 DSH 里弹出提醒；窗口在后台时用系统通知，点一下直接回到知行。',
             srow('早安提醒', '提醒你看今天的待办', hm('morningTime', '早安提醒')),
             srow('晚报提醒', '提醒你写日报，AI 会提前整理好草稿', hm('eveningTime', '晚报提醒')),
+            srow('黄金时段', '到点提醒你给第一重点开 1 小时；留空不提醒',
+              h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' } },
+                h('input', {
+                  className: 'wb-input',
+                  style: { width: 120, borderColor: goldenInvalid ? 'var(--wb-danger,#DC2626)' : undefined },
+                  placeholder: '07:30', value: goldenValue, 'aria-label': '黄金时段开始时间',
+                  'aria-invalid': goldenInvalid || undefined,
+                  onChange: (event) => set('goldenTime', String(event.target.value).trim()),
+                }),
+                h('span', {
+                  className: 'wb-small',
+                  style: { color: goldenInvalid ? 'var(--wb-danger,#DC2626)' : 'var(--wb-text-3)' },
+                }, goldenInvalid ? '格式应为 HH:mm（00:00–23:59），或留空' : 'HH:mm，留空不提醒'))),
             srow('系统通知', '窗口切到后台或最小化时，用系统通知提醒你，不会再以「脚本编辑器」的名义弹窗',
               h('div', { className: 'wb-row', style: { gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' } },
                 h('span', { className: 'wb-small wb-muted' }, notificationHint),
@@ -9054,12 +9278,12 @@ window.__ModuleLoader__.load({
                 h('textarea', { className: 'wb-textarea', rows: 3, value: form.holidaysText, placeholder: '公司额外的假期，例如 2026-12-31', onChange: (event) => set('holidaysText', event.target.value) })),
               h('label', { className: 'wb-form-field' }, '手动补充调休上班（可选）',
                 h('textarea', { className: 'wb-textarea', rows: 3, value: form.extraText, placeholder: '公司额外的上班日，例如 2026-12-27', onChange: (event) => set('extraText', event.target.value) }))))] },
-        { id: 'growth', label: '成长', hint: '杠杆 · 偏航报告', items: [section('杠杆', '每天 2–4 个能推动目标的待办；AI 只给候选，确认后才写入。',
-            srow('完成动效', '完成杠杆时播放一个轻量动画', h(Switch, {
+        { id: 'growth', label: '成长', hint: '重点 · 偏航报告', items: [section('重点', '每天 2–4 个能推动目标的待办；AI 只给候选，确认后才写入。',
+            srow('完成动效', '完成重点时播放一个轻量动画', h(Switch, {
               checked: form.leverAnimation !== false, label: '完成动效', onChange: (value) => set('leverAnimation', value),
             })),
-            srow('早安只推杠杆', '关闭后早安通知还会列出当天待办', h(Switch, {
-              checked: form.leverMorningOnly !== false, label: '早安只推杠杆', onChange: (value) => set('leverMorningOnly', value),
+            srow('早安只推重点', '关闭后早安通知还会列出当天待办', h(Switch, {
+              checked: form.leverMorningOnly !== false, label: '早安只推重点', onChange: (value) => set('leverMorningOnly', value),
             }))), section('偏航报告', '每周日 20:00（按设置的城市时区）自动生成，节假日照常；统计本地完成，建议由 AI 自动起草。',
             srow('停滞提醒方式', 'weekly：停滞只在偏航报告里体现；daily：保留每日停提醒',
               h('select', {
@@ -9085,8 +9309,8 @@ window.__ModuleLoader__.load({
                   h('input', { className: 'wb-input', type: 'time', style: { width: 104 }, value: form.themeLightStart ?? '07:00', onChange: (event) => setAppearance('themeLightStart', event.target.value) }),
                   h('span', { className: 'wb-small wb-muted' }, '—'),
                   h('input', { className: 'wb-input', type: 'time', style: { width: 104 }, value: form.themeLightEnd ?? '19:00', onChange: (event) => setAppearance('themeLightEnd', event.target.value) })) : null))), h(QuotesSettings, { key: 'quotes', show, ai })] },
-        { id: 'privacy', label: '隐私与数据', hint: '隐私 · 使用统计', items: [section('隐私', '人生面内容只在本机；工作汇报永远不包含北极星、杠杆和偏航报告。',
-            srow('允许 AI 读取一句话愿景和规则', '用于杠杆推荐、偏航建议、目标拆解；反愿景和身份宣言永不发送',
+        { id: 'privacy', label: '隐私与数据', hint: '隐私 · 使用统计', items: [section('隐私', '人生面内容只在本机；工作汇报永远不包含北极星、重点和偏航报告。',
+            srow('允许 AI 读取一句话愿景和规则', '用于重点推荐、偏航建议、目标拆解；反愿景和身份宣言永不发送',
               h(Switch, {
                 checked: northStar.shareWithAI === true, label: '允许 AI 读取一句话愿景和规则',
                 onChange: (value) => setNorthStar({ shareWithAI: value }),
@@ -9101,13 +9325,13 @@ window.__ModuleLoader__.load({
                 checked: northStar.blur !== false, label: '北极星防窥遮挡',
                 onChange: (value) => setNorthStar({ blur: value }),
               })),
-            h('div', { className: 'wb-privacy-note' }, '团队 / 上级周报永远不会包含北极星、杠杆、偏航报告，这一条没有开关。')), section('我的使用统计', '只有数字，没有内容；保存在本机，超过 180 天自动清理。',
+            h('div', { className: 'wb-privacy-note' }, '团队 / 上级周报永远不会包含北极星、重点、偏航报告，这一条没有开关。')), section('我的使用统计', '只有数字，没有内容；保存在本机，超过 180 天自动清理。',
             metrics
               ? h('div', { className: 'wb-metrics' },
                 h('div', { className: 'wb-metric' }, h('b', null, metrics.activeDays), h('span', null, '活跃天数')),
                 h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.report ?? 0), h('span', null, '日报')),
-                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.leverSet ?? 0), h('span', null, '设定杠杆')),
-                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.leverItems ?? 0), h('span', null, '杠杆条目')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.leverSet ?? 0), h('span', null, '设定重点')),
+                h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.leverItems ?? 0), h('span', null, '重点条目')),
                 h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.northstarSave ?? 0), h('span', null, '保存北极星')),
                 h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.driftBuild ?? 0), h('span', null, '生成偏航')),
                 h('div', { className: 'wb-metric' }, h('b', null, metrics.totals?.driftOpen ?? 0), h('span', null, '打开偏航')),
@@ -9115,7 +9339,7 @@ window.__ModuleLoader__.load({
                 h('button', {
                   className: 'wb-btn sm ghost', style: { alignSelf: 'center' },
                   onClick: () => {
-                    const text = `知行最近 ${metrics.weeks} 周：活跃 ${metrics.activeDays} 天；日报 ${metrics.totals?.report ?? 0} 份；杠杆设定 ${metrics.totals?.leverSet ?? 0} 次、${metrics.totals?.leverItems ?? 0} 条；保存北极星 ${metrics.totals?.northstarSave ?? 0} 次；生成偏航 ${metrics.totals?.driftBuild ?? 0} 次、打开 ${metrics.totals?.driftOpen ?? 0} 次；建议采纳率 ${metrics.adviceAcceptRate == null ? '—' : `${metrics.adviceAcceptRate}%`}。`
+                    const text = `知行最近 ${metrics.weeks} 周：活跃 ${metrics.activeDays} 天；日报 ${metrics.totals?.report ?? 0} 份；重点设定 ${metrics.totals?.leverSet ?? 0} 次、${metrics.totals?.leverItems ?? 0} 条；保存北极星 ${metrics.totals?.northstarSave ?? 0} 次；生成偏航 ${metrics.totals?.driftBuild ?? 0} 次、打开 ${metrics.totals?.driftOpen ?? 0} 次；建议采纳率 ${metrics.adviceAcceptRate == null ? '—' : `${metrics.adviceAcceptRate}%`}。`
                     navigator.clipboard?.writeText(text).then(() => show('已复制使用统计')).catch(() => show('复制失败，可截图分享', 'error'))
                   },
                 }, '复制为文本'))
@@ -9176,6 +9400,8 @@ window.__ModuleLoader__.load({
         .filter((name) => panelWidth < Number(name.slice(5)))
         .join(' ')
       const [tab, setTab] = useState(pendingTab || 'today')
+      // 2.2 黄金时段提醒带过来的预选：{ open:'today', focus:'top', date, todoId }
+      const [focusPreset, setFocusPreset] = useState(null)
       const [northStarStart, setNorthStarStart] = useState(false)
       const [state, setState] = useState(null)
       const [suggestions, setSuggestions] = useState([])
@@ -9202,6 +9428,16 @@ window.__ModuleLoader__.load({
         if (!pendingTab) return
         setTab(pendingTab)
         pendingTab = null
+      }, [])
+      useEffect(() => {
+        const onFocusPreset = (event) => {
+          const detail = event?.detail
+          if (!detail || detail.open !== 'today') return
+          setTab('today')
+          setFocusPreset(detail)
+        }
+        window.addEventListener('zhixing:focus', onFocusPreset)
+        return () => window.removeEventListener('zhixing:focus', onFocusPreset)
       }, [])
 
       const clearSnooze = useCallback((clearStorage = true) => {
@@ -9357,6 +9593,7 @@ window.__ModuleLoader__.load({
             : tab === 'today' ? h(TodayTab, {
               state, refresh, show, suggestions, onApplySuggestion: applySuggestion, onDismissSuggestion: dismissSuggestion,
               notice, onCloseNotice: () => setNotice(null), onSnoozeNotice: snoozeNotice, panelWidth,
+              focusPreset, onFocusPresetUsed: () => setFocusPreset(null),
             })
             : tab === 'reports' ? h(ReportsTab, { state, show })
             : tab === 'goals' ? h(GoalsTab, {

@@ -5,7 +5,7 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import test from 'node:test'
 import { createRoutes } from '../lib/routes.js'
-import { Store } from '../lib/store.js'
+import { Store, dateKey } from '../lib/store.js'
 
 async function setup(t) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'zhixing-v2-routes-'))
@@ -101,6 +101,8 @@ test('POST /levers/suggest：AI 不可用时返回本地候选', async (t) => {
   const data = JSON.parse(res.payload)
   assert.equal(data.by, 'local')
   assert.ok(data.candidates.length >= 2)
+  assert.ok(data.topCandidate?.todoId, '推荐接口带出第一重点候选')
+  assert.equal(data.topCandidate.by, 'local')
 })
 
 test('待办完成写 doneAt，重新打开时清掉', async (t) => {
@@ -119,4 +121,139 @@ test('待办完成写 doneAt，重新打开时清掉', async (t) => {
   await call(handler, { method: 'POST', url: '/api/zhixing/todos/status', body: { id: 't1', status: '未做' } })
   todos = await store.listTodoItems()
   assert.equal(todos.find((todo) => todo.id === 't1').doneAt, undefined)
+})
+
+test('POST /levers/top：设 / 取消第一重点，未确认的重点 400，精确匹配不漏到旧路由', async (t) => {
+  const { handler } = await setup(t)
+  await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/set',
+    body: { date: '2026-11-18', items: ['t1', 't2'] },
+  })
+
+  const set = await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/top',
+    body: { date: '2026-11-18', todoId: 't1' },
+  })
+  assert.equal(set.status, 200)
+  assert.equal(JSON.parse(set.payload).topTodoId, 't1')
+
+  const got = await call(handler, { url: '/api/zhixing/levers?date=2026-11-18' })
+  assert.equal(JSON.parse(got.payload).topTodoId, 't1')
+
+  // t3 是当天待办但没确认成重点 → 400
+  const bad = await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/top',
+    body: { date: '2026-11-18', todoId: 't3' },
+  })
+  assert.equal(bad.status, 400)
+
+  // 缺 todoId 不能当成取消处理
+  const missing = await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/top',
+    body: { date: '2026-11-18' },
+  })
+  assert.equal(missing.status, 400)
+
+  const cleared = await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/top',
+    body: { date: '2026-11-18', todoId: null },
+  })
+  assert.equal(cleared.status, 200)
+  assert.equal(JSON.parse(cleared.payload).topTodoId, null)
+
+  // 精确匹配：同前缀的未知路径仍然 404，说明没有用前缀吞路径
+  const unknown = await call(handler, { method: 'POST', url: '/api/zhixing/levers/topx', body: {} })
+  assert.equal(unknown.status, 404)
+})
+
+test('待办「变为」完成时给当天重点计数，反复切换只计 1 次（M-2 路由集成）', async (t) => {
+  const { handler, store } = await setup(t)
+  // routes.js 的钩子按「今天」找当天重点，所以这里也把重点设在今天。
+  const today = dateKey()
+  await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/set',
+    body: { date: today, items: ['t1', 't2'] },
+  })
+  await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/top',
+    body: { date: today, todoId: 't1' },
+  })
+  const totals = async () => {
+    const metrics = await store.readJson('.internal/metrics.json', { days: {} })
+    const sum = (name) => Object.values(metrics.days ?? {}).reduce((acc, day) => acc + Number(day[name] ?? 0), 0)
+    return { leverDone: sum('leverDone'), topLeverDone: sum('topLeverDone') }
+  }
+
+  await call(handler, { method: 'POST', url: '/api/zhixing/todos/status', body: { id: 't1', status: '完成' } })
+  assert.deepEqual(await totals(), { leverDone: 1, topLeverDone: 1 })
+
+  // 完成 → 未完成 → 完成：同一待办当天只计 1 次
+  await call(handler, { method: 'POST', url: '/api/zhixing/todos/status', body: { id: 't1', status: '未做' } })
+  await call(handler, { method: 'POST', url: '/api/zhixing/todos/status', body: { id: 't1', status: '完成' } })
+  assert.deepEqual(await totals(), { leverDone: 1, topLeverDone: 1 })
+
+  // 非当天重点的待办完成：不计
+  await call(handler, { method: 'POST', url: '/api/zhixing/todos/status', body: { id: 't3', status: '完成' } })
+  assert.deepEqual(await totals(), { leverDone: 1, topLeverDone: 1 })
+})
+
+test('专注路由：GET /focus、start / stop 的 409、旧 POST /focus 回归（2-2）', async (t) => {
+  const { handler, store } = await setup(t)
+
+  const empty = await call(handler, { url: '/api/zhixing/focus' })
+  assert.equal(empty.status, 200)
+  const emptyData = JSON.parse(empty.payload)
+  assert.equal(emptyData.running, null)
+  assert.equal(emptyData.remainingSec, null)
+  assert.equal(emptyData.todayMinutes, 0)
+  assert.equal(emptyData.goldenTime, '')
+
+  // goldenTime 由设置透传到 GET /focus（S5），默认空、设了就有
+  await store.saveSettings({ goldenTime: '07:30' })
+  assert.equal(JSON.parse((await call(handler, { url: '/api/zhixing/focus' })).payload).goldenTime, '07:30')
+
+  // 没有 running 时先测参数非法：时长不在 25/45/60/90、todoId 不是当天重点 → 400
+  const badPlanned = await call(handler, { method: 'POST', url: '/api/zhixing/focus/start', body: { plannedMinutes: 30 } })
+  assert.equal(badPlanned.status, 400)
+  const badTodo = await call(handler, { method: 'POST', url: '/api/zhixing/focus/start', body: { plannedMinutes: 60, todoId: 't1' } })
+  assert.equal(badTodo.status, 400)
+
+  const started = await call(handler, { method: 'POST', url: '/api/zhixing/focus/start', body: { plannedMinutes: 25 } })
+  assert.equal(started.status, 200)
+  const running = JSON.parse(started.payload).running
+  assert.equal(running.plannedMinutes, 25)
+  assert.equal(running.todoId, null)
+
+  const live = await call(handler, { url: '/api/zhixing/focus' })
+  const liveData = JSON.parse(live.payload)
+  assert.equal(liveData.running.id, running.id)
+  assert.ok(liveData.remainingSec > 1490 && liveData.remainingSec <= 1500)
+
+  // 已有计时再开始 → 409 focus_running，running 不变
+  const again = await call(handler, { method: 'POST', url: '/api/zhixing/focus/start', body: { plannedMinutes: 60 } })
+  assert.equal(again.status, 409)
+  assert.equal(JSON.parse(again.payload).error, 'focus_running')
+  assert.equal(JSON.parse(again.payload).message, '已有专注进行中，先结束当前这个')
+  assert.equal(JSON.parse((await call(handler, { url: '/api/zhixing/focus' })).payload).running.id, running.id)
+
+  const stopped = await call(handler, { method: 'POST', url: '/api/zhixing/focus/stop', body: {} })
+  assert.equal(stopped.status, 200)
+  assert.ok(['timeout', 'manual', 'abandon'].includes(JSON.parse(stopped.payload).record.endedBy))
+
+  // 没有计时再结束 → 409 focus_idle
+  const idle = await call(handler, { method: 'POST', url: '/api/zhixing/focus/stop', body: {} })
+  assert.equal(idle.status, 409)
+  assert.equal(JSON.parse(idle.payload).error, 'focus_idle')
+  assert.equal(JSON.parse(idle.payload).message, '现在没有进行中的专注')
+
+  // 旧的 POST /focus（聚焦 DSH 窗口）仍由旧分支响应；把 platform 改成 linux 避免真的 open dsh://
+  const originalPlatform = process.platform
+  Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+  try {
+    const legacy = await call(handler, { method: 'POST', url: '/api/zhixing/focus', body: {} })
+    assert.equal(legacy.status, 200)
+    assert.deepEqual(JSON.parse(legacy.payload), { ok: true })
+  } finally {
+    Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+  }
 })
