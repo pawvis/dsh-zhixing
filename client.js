@@ -5612,7 +5612,7 @@ window.__ModuleLoader__.load({
         show(todoId ? '专注开始，先做第一重点' : '专注开始')
       })
       const stopFocus = () => focusAction('stop', async () => {
-        const res = await request('/focus/stop')
+        const res = await request('/focus/stop', {})
         await loadFocus()
         const record = res.record ?? {}
         show(record.endedBy === 'abandon'
