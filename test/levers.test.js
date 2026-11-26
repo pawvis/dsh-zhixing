@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { candidateTodos, leversState, setLevers, setTop, skipLevers, suggestLevers } from '../lib/levers.js'
+import { candidateTodos, leversState, onTodoDone, setLevers, setTop, skipLevers, suggestLevers } from '../lib/levers.js'
 import { morningMessage } from '../lib/reminders.js'
 import { Store, ValidationError } from '../lib/store.js'
 
@@ -391,4 +391,61 @@ test('第一重点候选：没有模型时用候选里 rank 最小的那条（�
   assert.equal(result.topCandidate.todoId, result.candidates[0].todoId)
   assert.equal(result.topCandidate.by, 'local')
   assert.ok(result.topCandidate.reason.length <= 60)
+})
+
+function metricTotal(metrics, name) {
+  return Object.values(metrics.days ?? {}).reduce((sum, day) => sum + Number(day[name] ?? 0), 0)
+}
+
+test('完成计数：只算当天重点，第一重点再加 topLeverDone，重复切换只计 1 次（M-2）', async (t) => {
+  const store = await tempStore(t)
+  await seed(store)
+  await setLevers(store, { date: DATE, items: ['t1', 't2'] })
+  await setTop(store, DATE, 't1')
+  const totals = async () => {
+    const metrics = await store.readJson('.internal/metrics.json', { days: {} })
+    return { leverDone: metricTotal(metrics, 'leverDone'), topLeverDone: metricTotal(metrics, 'topLeverDone') }
+  }
+
+  assert.deepEqual(await totals(), { leverDone: 0, topLeverDone: 0 })
+
+  // 普通重点完成：只加 leverDone
+  await onTodoDone(store, 't2', DATE)
+  assert.deepEqual(await totals(), { leverDone: 1, topLeverDone: 0 })
+
+  // 第一重点完成：leverDone +1，topLeverDone +1
+  await onTodoDone(store, 't1', DATE)
+  assert.deepEqual(await totals(), { leverDone: 2, topLeverDone: 1 })
+
+  // 同一待办反复切换（完成→未完成→完成）只计 1 次
+  await onTodoDone(store, 't1', DATE)
+  await onTodoDone(store, 't1', DATE)
+  assert.deepEqual(await totals(), { leverDone: 2, topLeverDone: 1 })
+
+  // 非当天重点（t5 已完成但不在 items、t4 前一天遗留、未知 id）都不计
+  await onTodoDone(store, 't5', DATE)
+  await onTodoDone(store, 't4', DATE)
+  await onTodoDone(store, 'nope', DATE)
+  assert.deepEqual(await totals(), { leverDone: 2, topLeverDone: 1 })
+
+  const day = (await store.readJson('.internal/levers.json', { days: {} })).days[DATE]
+  assert.deepEqual(day.doneCounted, ['t2', 't1'], '当天记录里用 doneCounted 去重')
+})
+
+test('完成计数：不是第一重点时只加 leverDone，换第一重点后旧待办不再加 topLeverDone（M-2 补充）', async (t) => {
+  const store = await tempStore(t)
+  await seed(store)
+  await setLevers(store, { date: DATE, items: ['t1', 't2'] })
+  await setTop(store, DATE, 't2')
+  const totals = async () => {
+    const metrics = await store.readJson('.internal/metrics.json', { days: {} })
+    return { leverDone: metricTotal(metrics, 'leverDone'), topLeverDone: metricTotal(metrics, 'topLeverDone') }
+  }
+
+  await onTodoDone(store, 't1', DATE) // 不是第一重点
+  assert.deepEqual(await totals(), { leverDone: 1, topLeverDone: 0 })
+
+  await setTop(store, DATE, 't1') // 换成 t1，但 t1 当天已经计过完成，不补计
+  await onTodoDone(store, 't1', DATE)
+  assert.deepEqual(await totals(), { leverDone: 1, topLeverDone: 0 })
 })

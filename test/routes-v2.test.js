@@ -5,7 +5,7 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import test from 'node:test'
 import { createRoutes } from '../lib/routes.js'
-import { Store } from '../lib/store.js'
+import { Store, dateKey } from '../lib/store.js'
 
 async function setup(t) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'zhixing-v2-routes-'))
@@ -164,4 +164,35 @@ test('POST /levers/top：设 / 取消第一重点，未确认的重点 400，精
   // 精确匹配：同前缀的未知路径仍然 404，说明没有用前缀吞路径
   const unknown = await call(handler, { method: 'POST', url: '/api/zhixing/levers/topx', body: {} })
   assert.equal(unknown.status, 404)
+})
+
+test('待办「变为」完成时给当天重点计数，反复切换只计 1 次（M-2 路由集成）', async (t) => {
+  const { handler, store } = await setup(t)
+  // routes.js 的钩子按「今天」找当天重点，所以这里也把重点设在今天。
+  const today = dateKey()
+  await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/set',
+    body: { date: today, items: ['t1', 't2'] },
+  })
+  await call(handler, {
+    method: 'POST', url: '/api/zhixing/levers/top',
+    body: { date: today, todoId: 't1' },
+  })
+  const totals = async () => {
+    const metrics = await store.readJson('.internal/metrics.json', { days: {} })
+    const sum = (name) => Object.values(metrics.days ?? {}).reduce((acc, day) => acc + Number(day[name] ?? 0), 0)
+    return { leverDone: sum('leverDone'), topLeverDone: sum('topLeverDone') }
+  }
+
+  await call(handler, { method: 'POST', url: '/api/zhixing/todos/status', body: { id: 't1', status: '完成' } })
+  assert.deepEqual(await totals(), { leverDone: 1, topLeverDone: 1 })
+
+  // 完成 → 未完成 → 完成：同一待办当天只计 1 次
+  await call(handler, { method: 'POST', url: '/api/zhixing/todos/status', body: { id: 't1', status: '未做' } })
+  await call(handler, { method: 'POST', url: '/api/zhixing/todos/status', body: { id: 't1', status: '完成' } })
+  assert.deepEqual(await totals(), { leverDone: 1, topLeverDone: 1 })
+
+  // 非当天重点的待办完成：不计
+  await call(handler, { method: 'POST', url: '/api/zhixing/todos/status', body: { id: 't3', status: '完成' } })
+  assert.deepEqual(await totals(), { leverDone: 1, topLeverDone: 1 })
 })
